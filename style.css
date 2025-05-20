@@ -1,3 +1,13 @@
+body { font-family: Arial, sans-serif; background: #f6f7fb; padding: 2em; }
+h1 { margin-bottom: 1.2em; }
+.meter-card { 
+  background: #fff; 
+  border-radius: 10px; 
+  box-shadow: 0 1px 8px #bbc8da80; 
+  margin-bottom: 2em; 
+  padding: 1.3em 1.4em 1.1em 1.4em; 
+  max-width: 700px;
+}
 .meter-row {
   display: flex;
   flex-wrap: wrap;
@@ -5,35 +15,82 @@
   align-items: center;
   margin-bottom: 0.5em;
 }
-
 .section-divider {
   border-bottom: 1.5px solid #e3e8f0;
   margin: 0.9em 0 0.6em 0;
 }
-
+label, input, select, button { margin: 0.3em; }
+input[type="number"], input[type="text"], select {
+  padding: 0.2em 0.4em;
+  border: 1px solid #d3d9ea;
+  border-radius: 5px;
+  background: #fafdff;
+}
+button {
+  background: #2b4da5;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 0.4em 1em;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+button:disabled { background: #b7c2dd; cursor: not-allowed; }
+button:hover:not(:disabled) { background: #143069; }
 .details-content {
   margin: 0.6em 0 0 0.6em;
   display: flex;
   flex-direction: column;
   gap: 0.7em;
 }
-
 .prob-row {
   display: flex;
   flex-wrap: wrap;
   gap: 1.5em;
   align-items: center;
 }
-
 .inject-row {
   display: flex;
   align-items: center;
   gap: 1.1em;
   margin-top: 0.3em;
 }
-
+.export-btns { margin: 1em 0 0.5em 0; }
+.export-btns button { margin-right: 0.7em; }
+.chart-container {
+  display: flex;
+  flex-direction: row;
+  gap: 1.2em;
+  align-items: flex-start;
+  justify-content: flex-start;
+  margin-bottom: 1em;
+}
+.chart-container > div {
+  width: 290px;
+  min-width: 170px;
+  max-width: 330px;
+  background: #f9fbff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px #bbc8da36;
+  padding: 0.3em 0.3em 0.8em 0.3em;
+}
+canvas {
+  background: #fafbff;
+  border-radius: 8px;
+  width: 100% !important;
+  height: 110px !important;
+  max-width: 320px;
+  min-width: 140px;
+}
+table { width: 100%; margin-top: 1em; border-collapse: collapse;}
+th, td { padding: 0.33em; border: 1px solid #e3e8f0; text-align: center;}
+th { background: #eaf1fa; }
+.mqtt-status { font-size:0.98em; margin-left:1.1em; color: #21409a; min-width: 90px; display: inline-block;}
+details summary { cursor: pointer; font-size: 1.05em; }
 @media (max-width: 900px) {
   .meter-row { flex-direction: column; gap: 0.8em 0.5em; }
   .prob-row, .inject-row { flex-direction: column; gap: 0.5em; }
   .details-content { margin-left: 0.1em; }
+  .chart-container { flex-direction: column; gap: 0.7em; align-items: stretch; }
+  .chart-container > div { width: 100%; max-width: 98vw; min-width: unset; }
 }

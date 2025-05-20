@@ -336,7 +336,6 @@ function injectFault(idx) {
   }
 }
 
-// MQTT status logic as before
 function updateMqttStatus(meterId, msg) {
   const meter = meters.find(m => m.id === meterId);
   if (meter) {
