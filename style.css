@@ -1,16 +1,39 @@
-body { font-family: Arial; background: #f6f7fb; padding: 2em;}
-.meter-card { background: #fff; border-radius: 8px; box-shadow: 0 1px 4px #bbb; margin-bottom: 2em; padding: 1em; max-width: 650px;}
-label, input, select, button { margin: 0.3em; }
-table { width: 100%; margin-top: 1em;}
-th, td { padding: 0.3em; border: 1px solid #eee; text-align: center;}
-th { background: #e3e8f0;}
-.chart-container { display: flex; gap: 1em; }
-canvas { background: #fafbff; border-radius: 8px; }
-.export-btns { margin: 1em 0 0.5em 0; }
-.export-btns button { margin-right: 0.5em; }
-details summary { cursor: pointer; }
-.mqtt-status { font-size:0.95em; margin-left:1em; color: #21409a; min-width: 100px; display: inline-block;}
+.meter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.2em 1.4em;
+  align-items: center;
+  margin-bottom: 0.5em;
+}
+
+.section-divider {
+  border-bottom: 1.5px solid #e3e8f0;
+  margin: 0.9em 0 0.6em 0;
+}
+
+.details-content {
+  margin: 0.6em 0 0 0.6em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7em;
+}
+
+.prob-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5em;
+  align-items: center;
+}
+
+.inject-row {
+  display: flex;
+  align-items: center;
+  gap: 1.1em;
+  margin-top: 0.3em;
+}
+
 @media (max-width: 900px) {
-  .chart-container { flex-direction: column; }
-  .meter-card { max-width: 98vw;}
+  .meter-row { flex-direction: column; gap: 0.8em 0.5em; }
+  .prob-row, .inject-row { flex-direction: column; gap: 0.5em; }
+  .details-content { margin-left: 0.1em; }
 }
