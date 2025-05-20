@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>IoT Water Meter Simulator</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2em; background: #f6f7fb; }
+        h1 { color: #21409a; }
+        .panel { background: #fff; border-radius: 8px; padding: 1.5em; box-shadow: 0 2px 6px #ccc; max-width: 550px; margin: auto; }
+        .controls { margin-bottom: 1.5em; }
+        label { display: block; margin: 0.5em 0 0.2em 0; }
+        input, select { width: 100%; padding: 0.5em; margin-bottom: 1em; border-radius: 4px; border: 1px solid #ccc; }
+        button { background: #21409a; color: #fff; padding: 0.7em 1.5em; border: none; border-radius: 4px; cursor: pointer; }
+        button:disabled { background: #bbb; }
+        table { width: 100%; margin-top: 1em; border-collapse: collapse; }
+        th, td { padding: 0.5em; border: 1px solid #eee; text-align: center; }
+        th { background: #e3e8f0; }
+    </style>
+</head>
+<body>
+    <div class="panel">
+        <h1>IoT Water Meter Simulator</h1>
+        <div class="controls">
+            <label for="meterId">Meter ID:</label>
+            <input type="text" id="meterId" value="WM-001">
+
+            <label for="profile">Usage Profile:</label>
+            <select id="profile">
+                <option value="residential">Residential</option>
+                <option value="commercial">Commercial</option>
+            </select>
+
+            <label for="interval">Data Interval (seconds):</label>
+            <input type="number" id="interval" value="10" min="1">
+
+            <button id="startBtn">Start Simulation</button>
+            <button id="stopBtn" disabled>Stop</button>
+        </div>
+        <div id="status"></div>
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>Flow Rate (L/min)</th>
+                    <th>Total Volume (L)</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <script>
+        let simulation = null;
+        let totalVolume = 0;
+
+        function getFlowRate(profile) {
+            const hour = new Date().getHours();
+            if (profile === "residential") {
+                // Simulate morning/evening peak
+                if ((hour >= 6 && hour <= 8) || (hour >= 18 && hour <= 21)) {
+                    return Math.random() * 10 + 5; // 5-15 L/min peak
+                }
+                if (hour >= 22 || hour <= 5) {
+                    return Math.random() < 0.8 ? 0 : Math.random() * 2; // mostly zero at night
+                }
+                return Math.random() * 3; // low use during day
+            } else {
+                // Commercial: moderate, steady use during business hours
+                if (hour >= 8 && hour <= 18) {
+                    return Math.random() * 8 + 3; // 3-11 L/min
+                }
+                return Math.random() < 0.9 ? 0 : Math.random() * 2; // mostly zero off-hours
+            }
+        }
+
+        function startSimulation() {
+            const meterId = document.getElementById('meterId').value || 'WM-001';
+            const profile = document.getElementById('profile').value;
+            const interval = parseInt(document.getElementById('interval').value, 10);
+
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = false;
+            document.getElementById('status').textContent = "Simulation running...";
+
+            totalVolume = 0;
+            document.querySelector("#dataTable tbody").innerHTML = "";
+
+            simulation = setInterval(() => {
+                const flowRate = parseFloat(getFlowRate(profile).toFixed(2));
+                totalVolume += (flowRate * interval) / 60; // convert per interval
+                const now = new Date();
+                const row = `<tr>
+                    <td>${now.toLocaleTimeString()}</td>
+                    <td>${flowRate}</td>
+                    <td>${totalVolume.toFixed(2)}</td>
+                    <td>normal</td>
+                </tr>`;
+                document.querySelector("#dataTable tbody").insertAdjacentHTML('afterbegin', row);
+            }, interval * 1000);
+        }
+
+        function stopSimulation() {
+            clearInterval(simulation);
+            simulation = null;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('status').textContent = "Simulation stopped.";
+        }
+
+        document.getElementById('startBtn').onclick = startSimulation;
+        document.getElementById('stopBtn').onclick = stopSimulation;
+    </script>
+</body>
+</html>
