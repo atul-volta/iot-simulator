@@ -225,9 +225,9 @@ function renderMeters(drawCharts = true) {
         <button onclick="removeMeter(${idx})">Remove</button>
       </div>
       <div class="section-divider"></div>
-      <div class="meter-row">
-        <details id="mqtt-details-${meter.id}" ${openDetails[meter.id] ? "open" : ""} style="margin-bottom: 0.7em;">
-          <summary><b>MQTT Settings</b> (optional)</summary>
+      <div class="details-row">
+        <details id="mqtt-details-${meter.id}" ${openDetails[meter.id] ? "open" : ""}>
+          <summary>MQTT Settings <span style="font-weight:normal;">(optional)</span></summary>
           <div class="details-content">
             <label>Broker URL:
               <input type="text" value="${meter.mqttBroker}" onchange="meters[${idx}].mqttBroker=this.value">
@@ -243,7 +243,7 @@ function renderMeters(drawCharts = true) {
           </div>
         </details>
         <details id="prob-details-${meter.id}" ${openProbDetails[meter.id] ? "open" : ""}>
-          <summary><b>Status Anomaly Probabilities & Fault Injection</b></summary>
+          <summary>Status Anomaly Probabilities & Fault Injection</summary>
           <div class="details-content flex-wrap">
             <div class="prob-row">
               <label>Leak (%):

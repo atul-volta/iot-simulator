@@ -19,6 +19,22 @@ h1 { margin-bottom: 1.2em; }
   border-bottom: 1.5px solid #e3e8f0;
   margin: 0.9em 0 0.6em 0;
 }
+
+.details-row {
+  display: flex;
+  flex-direction: row;
+  gap: 2.2em;
+  align-items: flex-start;
+  margin-bottom: 0.7em;
+}
+.meter-card details summary {
+  font-weight: bold;
+  font-size: 1.08em;
+  min-width: 295px;
+  display: block;
+  padding-left: 2px;
+}
+
 label, input, select, button { margin: 0.3em; }
 input[type="number"], input[type="text"], select {
   padding: 0.2em 0.4em;
@@ -86,9 +102,10 @@ table { width: 100%; margin-top: 1em; border-collapse: collapse;}
 th, td { padding: 0.33em; border: 1px solid #e3e8f0; text-align: center;}
 th { background: #eaf1fa; }
 .mqtt-status { font-size:0.98em; margin-left:1.1em; color: #21409a; min-width: 90px; display: inline-block;}
-details summary { cursor: pointer; font-size: 1.05em; }
+details summary { cursor: pointer; }
 @media (max-width: 900px) {
   .meter-row { flex-direction: column; gap: 0.8em 0.5em; }
+  .details-row { flex-direction: column; gap: 0.5em; }
   .prob-row, .inject-row { flex-direction: column; gap: 0.5em; }
   .details-content { margin-left: 0.1em; }
   .chart-container { flex-direction: column; gap: 0.7em; align-items: stretch; }
