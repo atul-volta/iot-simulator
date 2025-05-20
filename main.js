@@ -4,6 +4,8 @@ let flowCharts = {};
 let totalCharts = {};
 let mqttClients = {}; // meter.id -> mqtt.js client
 
+let openDetails = {}; // Track which <details> are open
+
 function addMeter() {
   meterCount++;
   const meterId = "WM-" + String(meterCount).padStart(3, "0");
@@ -142,6 +144,14 @@ function getFlowRate(profile) {
 
 function renderMeters(drawCharts = true) {
   const metersDiv = document.getElementById("meters");
+
+  // --- Preserve which details are open ---
+  openDetails = {};
+  meters.forEach(meter => {
+    const details = document.getElementById("mqtt-details-" + meter.id);
+    openDetails[meter.id] = details ? details.open : false;
+  });
+
   metersDiv.innerHTML = "";
   meters.forEach((meter, idx) => {
     const meterDiv = document.createElement("div");
@@ -161,7 +171,7 @@ function renderMeters(drawCharts = true) {
       <button onclick="stopMeter(${idx})" ${meter.timer ? "" : "disabled"}>Stop</button>
       <button onclick="removeMeter(${idx})">Remove</button>
       <div style="margin: 0.8em 0;">
-        <details>
+        <details id="mqtt-details-${meter.id}" ${openDetails[meter.id] ? "open" : ""}>
           <summary><b>MQTT Settings</b> (optional)</summary>
           <label>Broker URL:
             <input type="text" value="${meter.mqttBroker}" onchange="meters[${idx}].mqttBroker=this.value">
@@ -223,6 +233,32 @@ function renderMeters(drawCharts = true) {
   }
 }
 
+// This is now responsible for updating the meter object's mqttStatus AND the UI.
+// Also ensures 'Published' is visible for a moment before going back to 'Connected'.
+function updateMqttStatus(meterId, msg) {
+  const meter = meters.find(m => m.id === meterId);
+  if (meter) {
+    meter.mqttStatus = msg;
+    if (msg === "Published") {
+      setTimeout(() => {
+        if (meter.mqttStatus === "Published") {
+          meter.mqttStatus = "Connected";
+          const el = document.getElementById("mqttStatus-" + meterId);
+          if (el) el.textContent = "Connected";
+        }
+      }, 1200);
+    }
+  }
+  // Debugging
+  console.log("[MQTT Status]", meterId, msg);
+  const el = document.getElementById("mqttStatus-" + meterId);
+  if (el) el.textContent = msg;
+}
+
+function updateCharts(meter) {
+  renderMeters();
+}
+
 function drawOrUpdateChart(meter) {
   const flowCanvas = document.getElementById(`flowChart-${meter.id}`);
   const flowLabels = meter.chartLabels.length ? meter.chartLabels.slice().reverse() : [""];
@@ -280,19 +316,6 @@ function drawOrUpdateChart(meter) {
       }
     });
   }
-}
-
-// This is now responsible for updating the meter object's mqttStatus AND the UI.
-function updateMqttStatus(meterId, msg) {
-  const meter = meters.find(m => m.id === meterId);
-  if (meter) meter.mqttStatus = msg;
-  console.log("[MQTT Status]", meterId, msg);
-  const el = document.getElementById("mqttStatus-" + meterId);
-  if (el) el.textContent = msg;
-}
-
-function updateCharts(meter) {
-  renderMeters();
 }
 
 function exportCSV(index) {
