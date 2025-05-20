@@ -7,9 +7,14 @@ let mqttClients = {}; // meter.id -> mqtt.js client
 let openDetails = {};      // MQTT settings
 let openProbDetails = {};  // Probability/fault settings
 
+function getRandomSuffix() {
+  return Math.random().toString(36).substring(2, 7); // 5-char random
+}
+
 function addMeter() {
   meterCount++;
   const meterId = "WM-" + String(meterCount).padStart(3, "0");
+  const randomSuffix = getRandomSuffix();
   meters.push({
     id: meterId,
     profile: "residential",
@@ -22,7 +27,7 @@ function addMeter() {
     totalPoints: [],
     mqttEnabled: false,
     mqttBroker: "wss://broker.hivemq.com:8884/mqtt",
-    mqttTopic: `iot/watermeter/${meterId}`,
+    mqttTopic: `iot/watermeter/${meterId}/${randomSuffix}`,
     mqttStatus: "",
     probLeak: 2,
     probBurst: 1,
@@ -30,6 +35,8 @@ function addMeter() {
     probOffline: 0.5,
     injectStatus: "",
     injectPending: false,
+    topicHint: true, // show hint unless user edits
+    topicSuffix: randomSuffix
   });
   renderMeters();
 }
@@ -191,6 +198,12 @@ function getFlowRate(profile) {
   }
 }
 
+function updateTopic(idx, val) {
+  meters[idx].mqttTopic = val;
+  meters[idx].topicHint = false; // Hide the hint if edited
+  renderMeters(false);
+}
+
 function renderMeters(drawCharts = true) {
   const metersDiv = document.getElementById("meters");
 
@@ -233,8 +246,15 @@ function renderMeters(drawCharts = true) {
               <input type="text" value="${meter.mqttBroker}" onchange="meters[${idx}].mqttBroker=this.value">
             </label>
             <label>Topic:
-              <input type="text" value="${meter.mqttTopic}" onchange="meters[${idx}].mqttTopic=this.value">
+              <input type="text" id="topic-input-${meter.id}" value="${meter.mqttTopic}" 
+                onchange="updateTopic(${idx}, this.value)">
             </label>
+            <span class="topic-hint" id="topic-hint-${meter.id}" style="display: ${meter.topicHint ? "inline" : "none"};">
+              <span style="color: #2b4da5;">A unique topic helps avoid message clashes.<br>
+              Default is <b><span style='font-family:monospace;'>${meter.mqttTopic}</span></b>.<br>
+              You can add your name or a random string to the end.
+              </span>
+            </span>
             <label>
               <input type="checkbox" ${meter.mqttEnabled ? "checked" : ""} onchange="meters[${idx}].mqttEnabled=this.checked">
               Enable MQTT Export
@@ -457,6 +477,7 @@ window.removeMeter = removeMeter;
 window.exportCSV = exportCSV;
 window.exportJSON = exportJSON;
 window.injectFault = injectFault;
+window.updateTopic = updateTopic;
 
 // Demo: Add first meter
 addMeter();
