@@ -19,7 +19,8 @@ function addMeter() {
     totalPoints: [],
     mqttEnabled: false,
     mqttBroker: "wss://broker.hivemq.com:8884/mqtt",
-    mqttTopic: `iot/watermeter/${meterId}`
+    mqttTopic: `iot/watermeter/${meterId}`,
+    mqttStatus: ""
   });
   renderMeters();
 }
@@ -118,6 +119,9 @@ function generateMeterData(meter) {
     } catch (e) {
       updateMqttStatus(meter.id, "Publish Error");
     }
+  } else {
+    // If not enabled, show as "Disabled"
+    updateMqttStatus(meter.id, "");
   }
 }
 
@@ -169,7 +173,7 @@ function renderMeters(drawCharts = true) {
             <input type="checkbox" ${meter.mqttEnabled ? "checked" : ""} onchange="meters[${idx}].mqttEnabled=this.checked">
             Enable MQTT Export
           </label>
-          <span id="mqttStatus-${meter.id}" class="mqtt-status"></span>
+          <span id="mqttStatus-${meter.id}" class="mqtt-status">${meter.mqttStatus || ""}</span>
         </details>
       </div>
       <div class="export-btns">
@@ -278,13 +282,17 @@ function drawOrUpdateChart(meter) {
   }
 }
 
-function updateCharts(meter) {
-  renderMeters();
-}
-
+// This is now responsible for updating the meter object's mqttStatus AND the UI.
 function updateMqttStatus(meterId, msg) {
+  const meter = meters.find(m => m.id === meterId);
+  if (meter) meter.mqttStatus = msg;
+  console.log("[MQTT Status]", meterId, msg);
   const el = document.getElementById("mqttStatus-" + meterId);
   if (el) el.textContent = msg;
+}
+
+function updateCharts(meter) {
+  renderMeters();
 }
 
 function exportCSV(index) {

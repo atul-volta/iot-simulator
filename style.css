@@ -9,7 +9,7 @@ canvas { background: #fafbff; border-radius: 8px; }
 .export-btns { margin: 1em 0 0.5em 0; }
 .export-btns button { margin-right: 0.5em; }
 details summary { cursor: pointer; }
-.mqtt-status { font-size:0.95em; margin-left:1em; color: #21409a; }
+.mqtt-status { font-size:0.95em; margin-left:1em; color: #21409a; min-width: 100px; display: inline-block;}
 @media (max-width: 900px) {
   .chart-container { flex-direction: column; }
   .meter-card { max-width: 98vw;}
