@@ -1,0 +1,16 @@
+body { font-family: Arial; background: #f6f7fb; padding: 2em;}
+.meter-card { background: #fff; border-radius: 8px; box-shadow: 0 1px 4px #bbb; margin-bottom: 2em; padding: 1em; max-width: 650px;}
+label, input, select, button { margin: 0.3em; }
+table { width: 100%; margin-top: 1em;}
+th, td { padding: 0.3em; border: 1px solid #eee; text-align: center;}
+th { background: #e3e8f0;}
+.chart-container { display: flex; gap: 1em; }
+canvas { background: #fafbff; border-radius: 8px; }
+.export-btns { margin: 1em 0 0.5em 0; }
+.export-btns button { margin-right: 0.5em; }
+details summary { cursor: pointer; }
+.mqtt-status { font-size:0.95em; margin-left:1em; color: #21409a; }
+@media (max-width: 900px) {
+  .chart-container { flex-direction: column; }
+  .meter-card { max-width: 98vw;}
+}
