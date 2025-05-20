@@ -2,14 +2,21 @@ let meters = [];
 let meterCount = 0;
 let flowCharts = {};
 let totalCharts = {};
-let mqttClients = {}; // meter.id -> mqtt.js client
+let mqttClients = {};
 
-let openDetails = {};      // MQTT settings
-let openProbDetails = {};  // Probability/fault settings
+let openDetails = {};
+let openProbDetails = {};
+
+const MAX_ROWS = 10000; // Cap for each meter's data array
+
+function getRandomSuffix() {
+  return Math.random().toString(36).substring(2, 7); // 5-char random
+}
 
 function addMeter() {
   meterCount++;
   const meterId = "WM-" + String(meterCount).padStart(3, "0");
+  const randomSuffix = getRandomSuffix();
   meters.push({
     id: meterId,
     profile: "residential",
@@ -22,7 +29,7 @@ function addMeter() {
     totalPoints: [],
     mqttEnabled: false,
     mqttBroker: "wss://broker.hivemq.com:8884/mqtt",
-    mqttTopic: `iot/watermeter/${meterId}`,
+    mqttTopic: `iot/watermeter/${meterId}/${randomSuffix}`,
     mqttStatus: "",
     probLeak: 2,
     probBurst: 1,
@@ -30,6 +37,14 @@ function addMeter() {
     probOffline: 0.5,
     injectStatus: "",
     injectPending: false,
+    topicHint: true,
+    topicSuffix: randomSuffix,
+    // Auto-export feature:
+    autoExportEnabled: false,
+    autoExportInterval: 10, // minutes
+    autoExportTimer: null,
+    autoExportLast: "",
+    autoExportStatus: ""
   });
   renderMeters();
 }
@@ -48,6 +63,9 @@ function removeMeter(index) {
   if (mqttClients[meterId]) {
     mqttClients[meterId].end?.();
     delete mqttClients[meterId];
+  }
+  if (meters[index].autoExportTimer) {
+    clearInterval(meters[index].autoExportTimer);
   }
   meters.splice(index, 1);
   renderMeters();
@@ -74,13 +92,11 @@ function generateMeterData(meter) {
   let flowRate = getFlowRate(meter.profile);
   let rowStatus = "normal";
 
-  // ---- Fault Injection ----
   if (meter.injectPending && meter.injectStatus && meter.injectStatus !== "normal") {
     rowStatus = meter.injectStatus;
-    meter.injectPending = false; // Clear after one use
-    flowRate = anomalyFlow(rowStatus, flowRate); // Apply flow anomaly
+    meter.injectPending = false;
+    flowRate = anomalyFlow(rowStatus, flowRate);
   } else {
-    // ---- Randomly apply fault/anomaly based on probabilities ----
     const r = Math.random() * 100;
     if (r < meter.probBurst) {
       rowStatus = "burst";
@@ -113,6 +129,11 @@ function generateMeterData(meter) {
     status: rowStatus
   });
 
+  // Auto-capping: keep only last MAX_ROWS
+  if (meter.data.length > MAX_ROWS) {
+    meter.data.length = MAX_ROWS;
+  }
+
   if (meter.chartLabels.length >= 30) {
     meter.chartLabels.pop();
     meter.flowPoints.pop();
@@ -124,7 +145,7 @@ function generateMeterData(meter) {
 
   updateCharts(meter);
 
-  // --- MQTT Export (if enabled) ---
+  // MQTT Export
   if (meter.mqttEnabled && meter.mqttBroker && meter.mqttTopic) {
     if (!mqttClients[meter.id] || !mqttClients[meter.id].connected) {
       try {
@@ -144,7 +165,6 @@ function generateMeterData(meter) {
         return;
       }
     }
-    // Build and send message
     const msg = {
       meter_id: meter.id,
       timestamp: new Date().toISOString(),
@@ -191,10 +211,59 @@ function getFlowRate(profile) {
   }
 }
 
+function updateTopic(idx, val) {
+  meters[idx].mqttTopic = val;
+  meters[idx].topicHint = false;
+  renderMeters(false);
+}
+
+// Auto-export section
+function toggleAutoExport(idx, enabled) {
+  meters[idx].autoExportEnabled = enabled;
+  updateAutoExport(idx);
+}
+
+function updateAutoExport(idx) {
+  const meter = meters[idx];
+  if (meter.autoExportTimer) {
+    clearInterval(meter.autoExportTimer);
+    meter.autoExportTimer = null;
+  }
+  if (meter.autoExportEnabled) {
+    meter.autoExportTimer = setInterval(() => {
+      autoExportAndClear(idx);
+    }, meter.autoExportInterval * 60 * 1000);
+  }
+}
+
+function autoExportAndClear(idx) {
+  const meter = meters[idx];
+  if (!meter || meter.data.length === 0) return;
+  // Prepare CSV content
+  const headers = ["Timestamp", "Flow Rate (L/min)", "Total Volume (L)", "Status"];
+  const rows = meter.data.map(d => [d.time, d.flow.toFixed(2), d.total, d.status]);
+  let csvContent = headers.join(",") + "\n" +
+    rows.map(e => e.join(",")).join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv" });
+  const ts = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
+  const filename = `${meter.id}_autoexport_${ts}.csv`;
+  const link = document.createElement("a");
+  link.setAttribute("href", URL.createObjectURL(blob));
+  link.setAttribute("download", filename);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  // Clear data, keep last point as continuity if any
+  if (meter.data.length > 0) {
+    meter.data = [meter.data[0]];
+  }
+  meter.autoExportLast = ts;
+  meter.autoExportStatus = `Auto-exported at ${new Date().toLocaleTimeString()}`;
+  renderMeters(false);
+}
+
 function renderMeters(drawCharts = true) {
   const metersDiv = document.getElementById("meters");
-
-  // --- Preserve open states for <details> sections ---
   openDetails = {};
   openProbDetails = {};
   meters.forEach(meter => {
@@ -225,16 +294,23 @@ function renderMeters(drawCharts = true) {
         <button onclick="removeMeter(${idx})">Remove</button>
       </div>
       <div class="section-divider"></div>
-      <div class="meter-row">
-        <details id="mqtt-details-${meter.id}" ${openDetails[meter.id] ? "open" : ""} style="margin-bottom: 0.7em;">
-          <summary><b>MQTT Settings</b> (optional)</summary>
+      <div class="details-row">
+        <details id="mqtt-details-${meter.id}" ${openDetails[meter.id] ? "open" : ""}>
+          <summary>MQTT Settings <span style="font-weight:normal;">(optional)</span></summary>
           <div class="details-content">
             <label>Broker URL:
               <input type="text" value="${meter.mqttBroker}" onchange="meters[${idx}].mqttBroker=this.value">
             </label>
             <label>Topic:
-              <input type="text" value="${meter.mqttTopic}" onchange="meters[${idx}].mqttTopic=this.value">
+              <input type="text" id="topic-input-${meter.id}" value="${meter.mqttTopic}" 
+                onchange="updateTopic(${idx}, this.value)">
             </label>
+            <span class="topic-hint" id="topic-hint-${meter.id}" style="display: ${meter.topicHint ? "inline" : "none"};">
+              <span style="color: #2b4da5;">A unique topic helps avoid message clashes.<br>
+              Default is <b><span style='font-family:monospace;'>${meter.mqttTopic}</span></b>.<br>
+              You can add your name or a random string to the end.
+              </span>
+            </span>
             <label>
               <input type="checkbox" ${meter.mqttEnabled ? "checked" : ""} onchange="meters[${idx}].mqttEnabled=this.checked">
               Enable MQTT Export
@@ -243,7 +319,7 @@ function renderMeters(drawCharts = true) {
           </div>
         </details>
         <details id="prob-details-${meter.id}" ${openProbDetails[meter.id] ? "open" : ""}>
-          <summary><b>Status Anomaly Probabilities & Fault Injection</b></summary>
+          <summary>Status Anomaly Probabilities & Fault Injection</summary>
           <div class="details-content flex-wrap">
             <div class="prob-row">
               <label>Leak (%):
@@ -279,6 +355,17 @@ function renderMeters(drawCharts = true) {
             </div>
           </div>
         </details>
+      </div>
+      <div class="auto-export-row">
+        <label>
+          <input type="checkbox" ${meter.autoExportEnabled ? "checked" : ""} 
+            onchange="toggleAutoExport(${idx}, this.checked)">
+          Auto-Export every
+        </label>
+        <input type="number" min="1" max="720" value="${meter.autoExportInterval}" style="width:48px"
+          onchange="meters[${idx}].autoExportInterval=parseInt(this.value,10);updateAutoExport(${idx});">
+        minutes
+        <span class="auto-export-status">${meter.autoExportStatus || ""}</span>
       </div>
       <div class="export-btns">
         <button onclick="exportCSV(${idx})">Export CSV</button>
@@ -457,6 +544,9 @@ window.removeMeter = removeMeter;
 window.exportCSV = exportCSV;
 window.exportJSON = exportJSON;
 window.injectFault = injectFault;
+window.updateTopic = updateTopic;
+window.toggleAutoExport = toggleAutoExport;
+window.updateAutoExport = updateAutoExport;
 
 // Demo: Add first meter
 addMeter();
