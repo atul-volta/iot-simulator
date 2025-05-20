@@ -3,7 +3,6 @@ let meterCount = 0;
 let flowCharts = {};
 let totalCharts = {};
 let mqttClients = {}; // meter.id -> mqtt.js client
-
 let openDetails = {}; // Track which <details> are open
 
 function addMeter() {
@@ -22,7 +21,15 @@ function addMeter() {
     mqttEnabled: false,
     mqttBroker: "wss://broker.hivemq.com:8884/mqtt",
     mqttTopic: `iot/watermeter/${meterId}`,
-    mqttStatus: ""
+    mqttStatus: "",
+    // New: Probabilities for each fault/anomaly, as percent (0-100)
+    probLeak: 2,       // %
+    probBurst: 1,      // %
+    probReverse: 0.5,  // %
+    probOffline: 0.5,  // %
+    // New: Fault injection state
+    injectStatus: "",
+    injectPending: false,
   });
   renderMeters();
 }
@@ -64,15 +71,49 @@ function stopMeter(index) {
 }
 
 function generateMeterData(meter) {
-  const flowRate = getFlowRate(meter.profile);
-  meter.totalVolume += (flowRate * meter.interval) / 60;
+  let flowRate = getFlowRate(meter.profile);
+  let rowStatus = "normal";
+
+  // ---- Fault Injection ----
+  if (meter.injectPending && meter.injectStatus && meter.injectStatus !== "normal") {
+    rowStatus = meter.injectStatus;
+    meter.injectPending = false; // Clear after one use
+    flowRate = anomalyFlow(rowStatus, flowRate); // Apply flow anomaly
+  } else {
+    // ---- Randomly apply fault/anomaly based on probabilities ----
+    const r = Math.random() * 100;
+    if (r < meter.probBurst) {
+      rowStatus = "burst";
+      flowRate = anomalyFlow("burst", flowRate);
+    } else if (r < meter.probBurst + meter.probLeak) {
+      rowStatus = "leak";
+      flowRate = anomalyFlow("leak", flowRate);
+    } else if (r < meter.probBurst + meter.probLeak + meter.probReverse) {
+      rowStatus = "reverse flow";
+      flowRate = anomalyFlow("reverse flow", flowRate);
+    } else if (r < meter.probBurst + meter.probLeak + meter.probReverse + meter.probOffline) {
+      rowStatus = "offline";
+      flowRate = 0;
+    } else if (flowRate < 0.5 && flowRate > 0) {
+      rowStatus = "low flow";
+    }
+  }
+
+  // Prevent negative volumes except for reverse flow
+  if (rowStatus !== "reverse flow" && flowRate < 0) flowRate = 0;
+
+  // Update total volume except when offline
+  if (rowStatus !== "offline") {
+    meter.totalVolume += (flowRate * meter.interval) / 60;
+  }
+
   const now = new Date();
   const label = now.toLocaleTimeString();
   meter.data.unshift({
     time: label,
     flow: flowRate,
     total: meter.totalVolume.toFixed(2),
-    status: "normal"
+    status: rowStatus
   });
 
   if (meter.chartLabels.length >= 30) {
@@ -88,7 +129,6 @@ function generateMeterData(meter) {
 
   // --- MQTT Export (if enabled) ---
   if (meter.mqttEnabled && meter.mqttBroker && meter.mqttTopic) {
-    // Connect if not already connected
     if (!mqttClients[meter.id] || !mqttClients[meter.id].connected) {
       try {
         mqttClients[meter.id]?.end?.();
@@ -111,9 +151,9 @@ function generateMeterData(meter) {
     const msg = {
       meter_id: meter.id,
       timestamp: new Date().toISOString(),
-      flow_rate_lpm: meter.flowPoints[0],
-      total_volume_l: meter.totalPoints[0],
-      status: "normal"
+      flow_rate_lpm: flowRate,
+      total_volume_l: meter.totalVolume,
+      status: rowStatus
     };
     try {
       mqttClients[meter.id].publish(meter.mqttTopic, JSON.stringify(msg));
@@ -122,8 +162,21 @@ function generateMeterData(meter) {
       updateMqttStatus(meter.id, "Publish Error");
     }
   } else {
-    // If not enabled, show as "Disabled"
     updateMqttStatus(meter.id, "");
+  }
+}
+
+// Helper: generate an anomalous flow rate for status
+function anomalyFlow(status, baseFlow) {
+  switch (status) {
+    case "burst":
+      return 20 + Math.random() * 10; // Large spike
+    case "leak":
+      return 10 + Math.random() * 5;
+    case "reverse flow":
+      return -(2 + Math.random() * 3);
+    default:
+      return baseFlow;
   }
 }
 
@@ -185,6 +238,41 @@ function renderMeters(drawCharts = true) {
           </label>
           <span id="mqttStatus-${meter.id}" class="mqtt-status">${meter.mqttStatus || ""}</span>
         </details>
+        <details id="prob-details-${meter.id}">
+          <summary><b>Status Anomaly Probabilities & Fault Injection</b></summary>
+          <div>
+            <label>Leak (%):
+              <input type="number" min="0" max="100" value="${meter.probLeak}" style="width: 55px"
+                onchange="meters[${idx}].probLeak=parseFloat(this.value)">
+            </label>
+            <label>Burst (%):
+              <input type="number" min="0" max="100" value="${meter.probBurst}" style="width: 55px"
+                onchange="meters[${idx}].probBurst=parseFloat(this.value)">
+            </label>
+            <label>Reverse Flow (%):
+              <input type="number" min="0" max="100" value="${meter.probReverse}" style="width: 55px"
+                onchange="meters[${idx}].probReverse=parseFloat(this.value)">
+            </label>
+            <label>Offline (%):
+              <input type="number" min="0" max="100" value="${meter.probOffline}" style="width: 55px"
+                onchange="meters[${idx}].probOffline=parseFloat(this.value)">
+            </label>
+          </div>
+          <div style="margin-top: 0.5em">
+            <label>Inject Fault:
+              <select id="inject-${meter.id}">
+                <option value="">-- select --</option>
+                <option value="leak">Leak</option>
+                <option value="burst">Burst</option>
+                <option value="reverse flow">Reverse Flow</option>
+                <option value="offline">Offline</option>
+                <option value="low flow">Low Flow</option>
+              </select>
+              <button onclick="injectFault(${idx})">Inject</button>
+            </label>
+            <span style="color:#ba8008; font-size:0.98em;">(injects for next reading)</span>
+          </div>
+        </details>
       </div>
       <div class="export-btns">
         <button onclick="exportCSV(${idx})">Export CSV</button>
@@ -233,8 +321,16 @@ function renderMeters(drawCharts = true) {
   }
 }
 
-// This is now responsible for updating the meter object's mqttStatus AND the UI.
-// Also ensures 'Published' is visible for a moment before going back to 'Connected'.
+function injectFault(idx) {
+  const meter = meters[idx];
+  const val = document.getElementById(`inject-${meter.id}`).value;
+  if (val) {
+    meter.injectStatus = val;
+    meter.injectPending = true;
+  }
+}
+
+// MQTT status logic remains the same as previous version
 function updateMqttStatus(meterId, msg) {
   const meter = meters.find(m => m.id === meterId);
   if (meter) {
@@ -357,6 +453,7 @@ window.stopMeter = stopMeter;
 window.removeMeter = removeMeter;
 window.exportCSV = exportCSV;
 window.exportJSON = exportJSON;
+window.injectFault = injectFault;
 
 // Demo: Add first meter
 addMeter();
