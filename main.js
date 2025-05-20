@@ -38,13 +38,7 @@ function addMeter() {
     injectStatus: "",
     injectPending: false,
     topicHint: true,
-    topicSuffix: randomSuffix,
-    // Auto-export feature:
-    autoExportEnabled: false,
-    autoExportInterval: 10, // minutes
-    autoExportTimer: null,
-    autoExportLast: "",
-    autoExportStatus: ""
+    topicSuffix: randomSuffix
   });
   renderMeters();
 }
@@ -63,9 +57,6 @@ function removeMeter(index) {
   if (mqttClients[meterId]) {
     mqttClients[meterId].end?.();
     delete mqttClients[meterId];
-  }
-  if (meters[index].autoExportTimer) {
-    clearInterval(meters[index].autoExportTimer);
   }
   meters.splice(index, 1);
   renderMeters();
@@ -217,51 +208,6 @@ function updateTopic(idx, val) {
   renderMeters(false);
 }
 
-// Auto-export section
-function toggleAutoExport(idx, enabled) {
-  meters[idx].autoExportEnabled = enabled;
-  updateAutoExport(idx);
-}
-
-function updateAutoExport(idx) {
-  const meter = meters[idx];
-  if (meter.autoExportTimer) {
-    clearInterval(meter.autoExportTimer);
-    meter.autoExportTimer = null;
-  }
-  if (meter.autoExportEnabled) {
-    meter.autoExportTimer = setInterval(() => {
-      autoExportAndClear(idx);
-    }, meter.autoExportInterval * 60 * 1000);
-  }
-}
-
-function autoExportAndClear(idx) {
-  const meter = meters[idx];
-  if (!meter || meter.data.length === 0) return;
-  // Prepare CSV content
-  const headers = ["Timestamp", "Flow Rate (L/min)", "Total Volume (L)", "Status"];
-  const rows = meter.data.map(d => [d.time, d.flow.toFixed(2), d.total, d.status]);
-  let csvContent = headers.join(",") + "\n" +
-    rows.map(e => e.join(",")).join("\n");
-  const blob = new Blob([csvContent], { type: "text/csv" });
-  const ts = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
-  const filename = `${meter.id}_autoexport_${ts}.csv`;
-  const link = document.createElement("a");
-  link.setAttribute("href", URL.createObjectURL(blob));
-  link.setAttribute("download", filename);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  // Clear data, keep last point as continuity if any
-  if (meter.data.length > 0) {
-    meter.data = [meter.data[0]];
-  }
-  meter.autoExportLast = ts;
-  meter.autoExportStatus = `Auto-exported at ${new Date().toLocaleTimeString()}`;
-  renderMeters(false);
-}
-
 function renderMeters(drawCharts = true) {
   const metersDiv = document.getElementById("meters");
   openDetails = {};
@@ -355,17 +301,6 @@ function renderMeters(drawCharts = true) {
             </div>
           </div>
         </details>
-      </div>
-      <div class="auto-export-row">
-        <label>
-          <input type="checkbox" ${meter.autoExportEnabled ? "checked" : ""} 
-            onchange="toggleAutoExport(${idx}, this.checked)">
-          Auto-Export every
-        </label>
-        <input type="number" min="1" max="720" value="${meter.autoExportInterval}" style="width:48px"
-          onchange="meters[${idx}].autoExportInterval=parseInt(this.value,10);updateAutoExport(${idx});">
-        minutes
-        <span class="auto-export-status">${meter.autoExportStatus || ""}</span>
       </div>
       <div class="export-btns">
         <button onclick="exportCSV(${idx})">Export CSV</button>
@@ -545,8 +480,6 @@ window.exportCSV = exportCSV;
 window.exportJSON = exportJSON;
 window.injectFault = injectFault;
 window.updateTopic = updateTopic;
-window.toggleAutoExport = toggleAutoExport;
-window.updateAutoExport = updateAutoExport;
 
 // Demo: Add first meter
 addMeter();
