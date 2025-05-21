@@ -4,19 +4,9 @@ let flowCharts = {};
 let totalCharts = {};
 let mqttClients = {};
 
-let openDetails = {};
-let openProbDetails = {};
-
-const MAX_ROWS = 10000; // Cap for each meter's data array
-
-function getRandomSuffix() {
-  return Math.random().toString(36).substring(2, 7); // 5-char random
-}
-
 function addMeter() {
   meterCount++;
   const meterId = "WM-" + String(meterCount).padStart(3, "0");
-  const randomSuffix = getRandomSuffix();
   meters.push({
     id: meterId,
     profile: "residential",
@@ -29,16 +19,12 @@ function addMeter() {
     totalPoints: [],
     mqttEnabled: false,
     mqttBroker: "wss://broker.hivemq.com:8884/mqtt",
-    mqttTopic: `iot/watermeter/${meterId}/${randomSuffix}`,
-    mqttStatus: "",
-    probLeak: 2,
-    probBurst: 1,
-    probReverse: 0.5,
-    probOffline: 0.5,
-    injectStatus: "",
-    injectPending: false,
-    topicHint: true,
-    topicSuffix: randomSuffix
+    mqttTopic: `iot/watermeter/${meterId}`,
+    leakProb: 2,
+    burstProb: 1,
+    reverseProb: 0.5,
+    offlineProb: 0.5,
+    injectNext: "",
   });
   renderMeters();
 }
@@ -65,12 +51,13 @@ function removeMeter(index) {
 function startMeter(index) {
   const meter = meters[index];
   if (meter.timer) return;
-  generateMeterData(meter);
+  generateMeterData(meter, true); // Generate first point
+  renderMeters(); // Ensure DOM/canvases are present
+  // Start periodic updates
   meter.timer = setInterval(() => {
-    generateMeterData(meter);
-    renderMeters(false);
+    generateMeterData(meter, false);
+    renderMeters();
   }, meter.interval * 1000);
-  renderMeters();
 }
 
 function stopMeter(index) {
@@ -79,52 +66,47 @@ function stopMeter(index) {
   renderMeters();
 }
 
-function generateMeterData(meter) {
-  let flowRate = getFlowRate(meter.profile);
-  let rowStatus = "normal";
-
-  if (meter.injectPending && meter.injectStatus && meter.injectStatus !== "normal") {
-    rowStatus = meter.injectStatus;
-    meter.injectPending = false;
-    flowRate = anomalyFlow(rowStatus, flowRate);
-  } else {
-    const r = Math.random() * 100;
-    if (r < meter.probBurst) {
-      rowStatus = "burst";
-      flowRate = anomalyFlow("burst", flowRate);
-    } else if (r < meter.probBurst + meter.probLeak) {
-      rowStatus = "leak";
-      flowRate = anomalyFlow("leak", flowRate);
-    } else if (r < meter.probBurst + meter.probLeak + meter.probReverse) {
-      rowStatus = "reverse flow";
-      flowRate = anomalyFlow("reverse flow", flowRate);
-    } else if (r < meter.probBurst + meter.probLeak + meter.probReverse + meter.probOffline) {
-      rowStatus = "offline";
-      flowRate = 0;
-    } else if (flowRate < 0.5 && flowRate > 0) {
-      rowStatus = "low flow";
-    }
+function injectFault(index) {
+  const select = document.getElementById(`injectFault-${meters[index].id}`);
+  if (select) {
+    meters[index].injectNext = select.value;
+    select.value = "";
   }
+}
 
-  if (rowStatus !== "reverse flow" && flowRate < 0) flowRate = 0;
-  if (rowStatus !== "offline") {
-    meter.totalVolume += (flowRate * meter.interval) / 60;
+function getRandomStatus(meter) {
+  const r = Math.random() * 100;
+  if (r < meter.leakProb) return "low flow";
+  if (r < meter.leakProb + meter.burstProb) return "burst";
+  if (r < meter.leakProb + meter.burstProb + meter.reverseProb) return "reverse flow";
+  if (r < meter.leakProb + meter.burstProb + meter.reverseProb + meter.offlineProb) return "offline";
+  return "normal";
+}
+
+function generateMeterData(meter, isFirst) {
+  let status = "normal";
+  if (meter.injectNext) {
+    status = {
+      leak: "low flow",
+      burst: "burst",
+      reverse: "reverse flow",
+      offline: "offline"
+    }[meter.injectNext] || "normal";
+    meter.injectNext = "";
+  } else if (!isFirst) {
+    status = getRandomStatus(meter);
   }
-
+  let flowRate = getFlowRate(meter.profile, status);
+  if (status === "offline") flowRate = 0;
+  meter.totalVolume += (flowRate * meter.interval) / 60;
   const now = new Date();
   const label = now.toLocaleTimeString();
   meter.data.unshift({
     time: label,
     flow: flowRate,
     total: meter.totalVolume.toFixed(2),
-    status: rowStatus
+    status: status
   });
-
-  // Auto-capping: keep only last MAX_ROWS
-  if (meter.data.length > MAX_ROWS) {
-    meter.data.length = MAX_ROWS;
-  }
-
   if (meter.chartLabels.length >= 30) {
     meter.chartLabels.pop();
     meter.flowPoints.pop();
@@ -134,9 +116,6 @@ function generateMeterData(meter) {
   meter.flowPoints.unshift(flowRate);
   meter.totalPoints.unshift(meter.totalVolume);
 
-  updateCharts(meter);
-
-  // MQTT Export
   if (meter.mqttEnabled && meter.mqttBroker && meter.mqttTopic) {
     if (!mqttClients[meter.id] || !mqttClients[meter.id].connected) {
       try {
@@ -159,9 +138,9 @@ function generateMeterData(meter) {
     const msg = {
       meter_id: meter.id,
       timestamp: new Date().toISOString(),
-      flow_rate_lpm: flowRate,
-      total_volume_l: meter.totalVolume,
-      status: rowStatus
+      flow_rate_lpm: meter.flowPoints[0],
+      total_volume_l: meter.totalPoints[0],
+      status: status
     };
     try {
       mqttClients[meter.id].publish(meter.mqttTopic, JSON.stringify(msg));
@@ -169,63 +148,43 @@ function generateMeterData(meter) {
     } catch (e) {
       updateMqttStatus(meter.id, "Publish Error");
     }
-  } else {
-    updateMqttStatus(meter.id, "");
   }
 }
 
-function anomalyFlow(status, baseFlow) {
-  switch (status) {
-    case "burst":
-      return 20 + Math.random() * 10;
-    case "leak":
-      return 10 + Math.random() * 5;
-    case "reverse flow":
-      return -(2 + Math.random() * 3);
-    default:
-      return baseFlow;
-  }
-}
-
-function getFlowRate(profile) {
+function getFlowRate(profile, status) {
   const hour = new Date().getHours();
+  let base = 0;
   if (profile === "residential") {
     if ((hour >= 6 && hour <= 8) || (hour >= 18 && hour <= 21))
-      return Math.random() * 10 + 5;
-    if (hour >= 22 || hour <= 5)
-      return Math.random() < 0.8 ? 0 : Math.random() * 2;
-    return Math.random() * 3;
+      base = Math.random() * 10 + 5;
+    else if (hour >= 22 || hour <= 5)
+      base = Math.random() < 0.8 ? 0 : Math.random() * 2;
+    else
+      base = Math.random() * 3;
   } else {
     if (hour >= 8 && hour <= 18)
-      return Math.random() * 8 + 3;
-    return Math.random() < 0.9 ? 0 : Math.random() * 2;
+      base = Math.random() * 8 + 3;
+    else
+      base = Math.random() < 0.9 ? 0 : Math.random() * 2;
   }
+  if (status === "low flow") return Math.random() * 0.5 + 0.01;
+  if (status === "burst") return base * (2.2 + Math.random() * 1.3);
+  if (status === "reverse flow") return -1 * (Math.random() * 2 + 0.1);
+  if (status === "offline") return 0;
+  return base;
 }
 
-function updateTopic(idx, val) {
-  meters[idx].mqttTopic = val;
-  meters[idx].topicHint = false;
-  renderMeters(false);
-}
-
-function renderMeters(drawCharts = true) {
+function renderMeters() {
   const metersDiv = document.getElementById("meters");
-  openDetails = {};
-  openProbDetails = {};
-  meters.forEach(meter => {
-    const d1 = document.getElementById("mqtt-details-" + meter.id);
-    openDetails[meter.id] = d1 ? d1.open : false;
-    const d2 = document.getElementById("prob-details-" + meter.id);
-    openProbDetails[meter.id] = d2 ? d2.open : false;
-  });
-
   metersDiv.innerHTML = "";
   meters.forEach((meter, idx) => {
     const meterDiv = document.createElement("div");
     meterDiv.className = "meter-card";
     meterDiv.innerHTML = `
-      <div class="meter-row">
-        <strong>Meter ID:</strong> <input value="${meter.id}" onchange="meters[${idx}].id=this.value">
+      <div class="inline-row">
+        <label><strong>Meter ID:</strong>
+          <input value="${meter.id}" onchange="meters[${idx}].id=this.value">
+        </label>
         <label>Profile:
           <select onchange="meters[${idx}].profile=this.value">
             <option value="residential" ${meter.profile==="residential"?"selected":""}>Residential</option>
@@ -235,76 +194,72 @@ function renderMeters(drawCharts = true) {
         <label>Interval (sec):
           <input type="number" min="1" value="${meter.interval}" onchange="meters[${idx}].interval=parseInt(this.value,10)">
         </label>
-        <button onclick="startMeter(${idx})" ${meter.timer ? "disabled" : ""}>Start</button>
-        <button onclick="stopMeter(${idx})" ${meter.timer ? "" : "disabled"}>Stop</button>
-        <button onclick="removeMeter(${idx})">Remove</button>
+        <button class="btn-blue" onclick="startMeter(${idx})" ${meter.timer ? "disabled" : ""}>Start</button>
+        <button class="btn-blue" onclick="stopMeter(${idx})" ${meter.timer ? "" : "disabled"}>Stop</button>
+        <button class="btn-blue" onclick="removeMeter(${idx})">Remove</button>
       </div>
-      <div class="section-divider"></div>
-      <div class="details-row">
-        <details id="mqtt-details-${meter.id}" ${openDetails[meter.id] ? "open" : ""}>
-          <summary>MQTT Settings <span style="font-weight:normal;">(optional)</span></summary>
-          <div class="details-content">
+      <div class="collapsible-section">
+        <button class="collapsible-toggle" type="button" aria-expanded="false">
+          <span class="chevron">&#9654;</span>
+          MQTT Settings <small style="font-weight:normal;margin-left:0.5em;">(optional)</small>
+        </button>
+        <div class="collapsible-content">
+          <div class="inline-row">
             <label>Broker URL:
               <input type="text" value="${meter.mqttBroker}" onchange="meters[${idx}].mqttBroker=this.value">
             </label>
             <label>Topic:
-              <input type="text" id="topic-input-${meter.id}" value="${meter.mqttTopic}" 
-                onchange="updateTopic(${idx}, this.value)">
+              <input type="text" value="${meter.mqttTopic}" onchange="meters[${idx}].mqttTopic=this.value">
             </label>
-            <span class="topic-hint" id="topic-hint-${meter.id}" style="display: ${meter.topicHint ? "inline" : "none"};">
-              <span style="color: #2b4da5;">A unique topic helps avoid message clashes.<br>
-              Default is <b><span style='font-family:monospace;'>${meter.mqttTopic}</span></b>.<br>
-              You can add your name or a random string to the end.
-              </span>
-            </span>
-            <label>
+            <label style="margin-right:0;">
               <input type="checkbox" ${meter.mqttEnabled ? "checked" : ""} onchange="meters[${idx}].mqttEnabled=this.checked">
-              Enable MQTT Export
+              Enable
             </label>
-            <span id="mqttStatus-${meter.id}" class="mqtt-status">${meter.mqttStatus || ""}</span>
           </div>
-        </details>
-        <details id="prob-details-${meter.id}" ${openProbDetails[meter.id] ? "open" : ""}>
-          <summary>Status Anomaly Probabilities & Fault Injection</summary>
-          <div class="details-content flex-wrap">
-            <div class="prob-row">
-              <label>Leak (%):
-                <input type="number" min="0" max="100" value="${meter.probLeak}" style="width: 55px"
-                  onchange="meters[${idx}].probLeak=parseFloat(this.value)">
-              </label>
-              <label>Burst (%):
-                <input type="number" min="0" max="100" value="${meter.probBurst}" style="width: 55px"
-                  onchange="meters[${idx}].probBurst=parseFloat(this.value)">
-              </label>
-              <label>Reverse Flow (%):
-                <input type="number" min="0" max="100" value="${meter.probReverse}" style="width: 55px"
-                  onchange="meters[${idx}].probReverse=parseFloat(this.value)">
-              </label>
-              <label>Offline (%):
-                <input type="number" min="0" max="100" value="${meter.probOffline}" style="width: 55px"
-                  onchange="meters[${idx}].probOffline=parseFloat(this.value)">
-              </label>
-            </div>
-            <div class="inject-row">
-              <label>Inject Fault:
-                <select id="inject-${meter.id}">
-                  <option value="">-- select --</option>
-                  <option value="leak">Leak</option>
-                  <option value="burst">Burst</option>
-                  <option value="reverse flow">Reverse Flow</option>
-                  <option value="offline">Offline</option>
-                  <option value="low flow">Low Flow</option>
-                </select>
-                <button onclick="injectFault(${idx})">Inject</button>
-              </label>
-              <span style="color:#ba8008; font-size:0.98em;">(injects for next reading)</span>
-            </div>
+          <div class="form-row">
+            <span>MQTT Export</span>
+            <span id="mqttStatus-${meter.id}" class="mqtt-status"></span>
           </div>
-        </details>
+        </div>
+      </div>
+      <div class="collapsible-section">
+        <button class="collapsible-toggle" type="button" aria-expanded="false">
+          <span class="chevron">&#9654;</span>
+          Status Anomaly Probabilities & Fault Injection
+        </button>
+        <div class="collapsible-content">
+          <div class="inline-row">
+            <label>Leak (%):
+              <input type="number" min="0" max="100" step="0.1" value="${meter.leakProb}" onchange="meters[${idx}].leakProb=parseFloat(this.value)">
+            </label>
+            <label>Burst (%):
+              <input type="number" min="0" max="100" step="0.1" value="${meter.burstProb}" onchange="meters[${idx}].burstProb=parseFloat(this.value)">
+            </label>
+            <label>Reverse Flow (%):
+              <input type="number" min="0" max="100" step="0.1" value="${meter.reverseProb}" onchange="meters[${idx}].reverseProb=parseFloat(this.value)">
+            </label>
+            <label>Offline (%):
+              <input type="number" min="0" max="100" step="0.1" value="${meter.offlineProb}" onchange="meters[${idx}].offlineProb=parseFloat(this.value)">
+            </label>
+          </div>
+          <div class="form-row">
+            <label>Inject Fault: 
+              <select id="injectFault-${meter.id}">
+                <option value="">-- select --</option>
+                <option value="leak">leak</option>
+                <option value="burst">burst</option>
+                <option value="reverse">reverse flow</option>
+                <option value="offline">offline</option>
+              </select>
+            </label>
+            <button class="btn-blue" onclick="injectFault(${idx})">Inject</button>
+            <span style="color:#c47817;font-size:0.98em;">(injects for next reading)</span>
+          </div>
+        </div>
       </div>
       <div class="export-btns">
-        <button onclick="exportCSV(${idx})">Export CSV</button>
-        <button onclick="exportJSON(${idx})">Export JSON</button>
+        <button class="btn-blue" onclick="exportCSV(${idx})">Export CSV</button>
+        <button class="btn-blue" onclick="exportJSON(${idx})">Export JSON</button>
       </div>
       <div class="chart-container">
         <div>
@@ -340,44 +295,12 @@ function renderMeters(drawCharts = true) {
     metersDiv.appendChild(meterDiv);
   });
 
-  if (drawCharts) {
-    setTimeout(() => {
-      meters.forEach((meter, idx) => {
-        drawOrUpdateChart(meter);
-      });
-    }, 10);
-  }
-}
-
-function injectFault(idx) {
-  const meter = meters[idx];
-  const val = document.getElementById(`inject-${meter.id}`).value;
-  if (val) {
-    meter.injectStatus = val;
-    meter.injectPending = true;
-  }
-}
-
-function updateMqttStatus(meterId, msg) {
-  const meter = meters.find(m => m.id === meterId);
-  if (meter) {
-    meter.mqttStatus = msg;
-    if (msg === "Published") {
-      setTimeout(() => {
-        if (meter.mqttStatus === "Published") {
-          meter.mqttStatus = "Connected";
-          const el = document.getElementById("mqttStatus-" + meterId);
-          if (el) el.textContent = "Connected";
-        }
-      }, 1200);
-    }
-  }
-  const el = document.getElementById("mqttStatus-" + meterId);
-  if (el) el.textContent = msg;
-}
-
-function updateCharts(meter) {
-  renderMeters();
+  // --- Always redraw all charts after DOM is ready
+  setTimeout(() => {
+    meters.forEach(meter => {
+      drawOrUpdateChart(meter);
+    });
+  }, 0);
 }
 
 function drawOrUpdateChart(meter) {
@@ -408,7 +331,6 @@ function drawOrUpdateChart(meter) {
       }
     });
   }
-
   const totalCanvas = document.getElementById(`totalChart-${meter.id}`);
   const totalLabels = meter.chartLabels.length ? meter.chartLabels.slice().reverse() : [""];
   const totalPoints = meter.totalPoints.length ? meter.totalPoints.slice().reverse() : [0];
@@ -439,6 +361,11 @@ function drawOrUpdateChart(meter) {
   }
 }
 
+function updateMqttStatus(meterId, msg) {
+  const el = document.getElementById("mqttStatus-" + meterId);
+  if (el) el.textContent = msg;
+}
+
 function exportCSV(index) {
   const meter = meters[index];
   if (!meter || meter.data.length === 0) return;
@@ -456,7 +383,6 @@ function exportCSV(index) {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 }
-
 function exportJSON(index) {
   const meter = meters[index];
   if (!meter || meter.data.length === 0) return;
@@ -471,6 +397,17 @@ function exportJSON(index) {
   URL.revokeObjectURL(url);
 }
 
+// Collapsible dropdown UI handler
+document.addEventListener('DOMContentLoaded', function() {
+  document.body.addEventListener('click', function(event) {
+    if (event.target.classList.contains('collapsible-toggle') || event.target.closest('.collapsible-toggle')) {
+      const btn = event.target.closest('.collapsible-toggle');
+      const expanded = btn.getAttribute('aria-expanded') === 'true';
+      btn.setAttribute('aria-expanded', (!expanded).toString());
+    }
+  });
+});
+
 // Expose for inline onclick
 window.addMeter = addMeter;
 window.startMeter = startMeter;
@@ -479,7 +416,6 @@ window.removeMeter = removeMeter;
 window.exportCSV = exportCSV;
 window.exportJSON = exportJSON;
 window.injectFault = injectFault;
-window.updateTopic = updateTopic;
 
 // Demo: Add first meter
 addMeter();

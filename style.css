@@ -1,133 +1,293 @@
-body { font-family: Arial, sans-serif; background: #f6f7fb; padding: 2em; }
-h1 { margin-bottom: 1.2em; }
-.meter-card { 
-  background: #fff; 
-  border-radius: 10px; 
-  box-shadow: 0 1px 8px #bbc8da80; 
-  margin-bottom: 2em; 
-  padding: 1.3em 1.4em 1.1em 1.4em; 
-  max-width: 700px;
+body {
+  font-family: 'Segoe UI', 'Arial', sans-serif;
+  background: #f7faff;
+  color: #25374d;
+  margin: 0;
+  padding: 0;
 }
-.meter-row {
+
+.banner {
+  background:#185bb4;
+  color:#fff;
+  padding:1.5em 1em 1em 1em;
+  text-align:center;
+  border-radius: 0 0 18px 18px;
+  box-shadow: 0 2px 16px #185bb455;
+}
+.banner h1 {
+  margin-bottom:0.2em;
+  font-size:2.2em;
+  letter-spacing:0.01em;
+}
+.banner .sub {
+  font-weight:normal;
+  font-size:0.7em;
+}
+.banner .desc {
+  font-size:1.1em;
+  font-style:italic;
+  opacity:0.95;
+}
+.beta-badge {
+  font-size:1em;
+  margin-top:0.6em;
+  color:#f7f7f7;
+  font-weight:bold;
+  background:#f0a202;
+  color:#fff;
+  padding:0.2em 0.7em;
+  border-radius:8px;
+  display:inline-block;
+}
+
+.about {
+  max-width:650px;
+  margin:1.8em auto 1em auto;
+  background:#f8fafc;
+  border-radius:16px;
+  box-shadow:0 1px 7px #c3d3e655;
+  padding:1.3em 2em 1.6em 2em;
+}
+.about h2 {
+  margin-top:0;
+  font-size:1.3em;
+  color:#185bb4;
+}
+.about ul {
+  margin-left:1em;
+  line-height:1.65;
+}
+.beta-note {
+  margin-top:1.3em; 
+  color:#b14f19; 
+  font-weight:600;
+}
+.contact {
+  font-size:0.95em; 
+  color:#888; 
+  margin-top:0.2em;
+}
+.contact a { color:#185bb4; text-decoration:none; }
+.contact a:hover { text-decoration:underline; }
+
+.mainbox {
+  max-width:950px;
+  margin:1.5em auto 1em auto;
+  padding:1.5em 2em 2em 2em;
+  background:#fff;
+  border-radius:18px;
+  box-shadow:0 2px 18px #c3d3e622;
+}
+.top-row {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:1em 1.5em;
+}
+.instructions {
+  font-size:1em;
+  color:#888;
+}
+footer {
+  margin-top:2em;
+  padding:1em 0 1.4em 0; 
+  text-align:center; 
+  font-size:1.02em;
+  color:#6c7c91;
+  background:#eef2fa;
+  border-radius:18px 18px 0 0;
+  box-shadow:0 -2px 14px #185bb422;
+}
+
+/* ---- Meter Card and Fields ---- */
+.meter-card {
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 1px 7px #185bb411;
+  padding: 1.1em 1.8em 2em 1.8em;
+  margin-bottom: 2.2em;
+  max-width: 740px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.meter-card > div:not(.collapsible-section):not(.collapsible-content) {
+  margin-bottom: 1.3em;
+}
+input, select {
+  font-size: 1em;
+  border: 1px solid #c5d8f6;
+  border-radius: 4px;
+  padding: 0.23em 0.5em;
+}
+
+.inline-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.2em 1.4em;
   align-items: center;
-  margin-bottom: 0.5em;
+  gap: 1.4em;
+  margin-bottom: 1em;
 }
-.section-divider {
-  border-bottom: 1.5px solid #e3e8f0;
-  margin: 0.9em 0 0.6em 0;
+.inline-row label,
+.inline-row select,
+.inline-row input[type="number"],
+.inline-row input[type="text"] {
+  margin-bottom: 0;
+  font-size: 1em;
 }
-.details-row {
+.inline-row input[type="number"],
+.inline-row input[type="text"] {
+  width: 90px;
+  min-width: 48px;
+  max-width: 180px;
+  margin-left: 0.4em;
+  margin-right: 0.8em;
+}
+.inline-row select {
+  margin-left: 0.4em;
+  margin-right: 1em;
+}
+.inline-row .btn-blue {
+  margin-right: 0.2em;
+}
+@media (max-width: 600px) {
+  .inline-row { flex-direction: column; align-items: flex-start; gap: 0.4em; }
+}
+
+/* ---- Collapsible Dropdown UI ---- */
+.collapsible-section {
+  margin-bottom: 1.3em;
+}
+.collapsible-toggle {
   display: flex;
-  flex-direction: row;
-  gap: 2.2em;
-  align-items: flex-start;
+  align-items: center;
+  gap: 0.6em;
+  font-size: 1.13em;
+  font-weight: bold;
+  background: #ddeaff;
+  border: 1.5px solid #185bb444;
+  border-radius: 10px 10px 0 0;
+  padding: 0.48em 1em;
+  cursor: pointer;
+  transition: background 0.13s, box-shadow 0.15s;
+  box-shadow: 0 1px 7px #185bb411;
+  margin-bottom: 0;
+  width: 100%;
+  text-align: left;
+}
+.chevron {
+  font-size: 1.2em;
+  margin-right: 0.05em;
+  transition: transform 0.22s cubic-bezier(.54,2,.61,.99);
+}
+.collapsible-toggle[aria-expanded="true"] .chevron {
+  transform: rotate(90deg);
+}
+.collapsible-content {
+  display: none;
+  background: #f7fafd;
+  border: 1.5px solid #ddeaff;
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  padding: 1.0em 1.1em 0.8em 1.3em;
+  margin-bottom: 1.2em;
+}
+.collapsible-toggle[aria-expanded="true"] + .collapsible-content {
+  display: block;
+  animation: fadeIn .18s;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.0em;
+  align-items: center;
   margin-bottom: 0.7em;
 }
-.meter-card details summary {
-  font-weight: bold;
-  font-size: 1.08em;
-  min-width: 295px;
-  display: block;
-  padding-left: 2px;
-}
-label, input, select, button { margin: 0.3em; }
-input[type="number"], input[type="text"], select {
-  padding: 0.2em 0.4em;
-  border: 1px solid #d3d9ea;
-  border-radius: 5px;
-  background: #fafdff;
-}
-button {
-  background: #2b4da5;
-  color: #fff;
-  border: none;
-  border-radius: 7px;
-  padding: 0.4em 1em;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-button:disabled { background: #b7c2dd; cursor: not-allowed; }
-button:hover:not(:disabled) { background: #143069; }
-.details-content {
-  margin: 0.6em 0 0 0.6em;
-  display: flex;
-  flex-direction: column;
-  gap: 0.7em;
-}
-.prob-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5em;
-  align-items: center;
-}
-.inject-row {
+.form-row label {
   display: flex;
   align-items: center;
-  gap: 1.1em;
-  margin-top: 0.3em;
+  font-weight: normal;
+  gap: 0.35em;
+  margin: 0;
+  font-size: 1em;
 }
-.export-btns { margin: 1em 0 0.5em 0; }
-.export-btns button { margin-right: 0.7em; }
-.auto-export-row {
-  margin-bottom: 0.5em;
-  display: flex;
-  align-items: center;
-  gap: 0.7em;
-  font-size: 0.97em;
+.form-row input[type="number"], .form-row input[type="text"], .form-row select {
+  min-width: 48px;
+  width: 75px;
+  max-width: 120px;
+  padding: 0.25em 0.5em;
+  font-size: 1em;
+  margin-right: 0.3em;
+}
+.export-btns {
+  margin-bottom: 1.2em;
 }
 .chart-container {
   display: flex;
-  flex-direction: row;
-  gap: 1.2em;
-  align-items: flex-start;
-  justify-content: flex-start;
-  margin-bottom: 1em;
+  gap: 2em;
+  margin: 1.1em 0;
 }
 .chart-container > div {
-  width: 290px;
-  min-width: 170px;
-  max-width: 330px;
-  background: #f9fbff;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px #bbc8da36;
-  padding: 0.3em 0.3em 0.8em 0.3em;
+  flex: 1 1 0;
 }
-canvas {
-  background: #fafbff;
-  border-radius: 8px;
-  width: 100% !important;
-  height: 110px !important;
-  max-width: 320px;
-  min-width: 140px;
+table {
+  width: 100%;
+  margin-top: 1em;
+  border-collapse: collapse;
+  font-size: 1em;
 }
-table { width: 100%; margin-top: 1em; border-collapse: collapse;}
-th, td { padding: 0.33em; border: 1px solid #e3e8f0; text-align: center;}
-th { background: #eaf1fa; }
-.mqtt-status { font-size:0.98em; margin-left:1.1em; color: #21409a; min-width: 90px; display: inline-block;}
-.topic-hint {
-  display: block;
-  margin-top: 0.4em;
-  font-size: 0.98em;
-  color: #365bb7;
-  background: #ecf2fb;
-  border-radius: 6px;
-  padding: 0.5em 0.7em;
-  max-width: 95%;
+th, td {
+  padding: 0.33em 0.6em;
+  border-bottom: 1px solid #e0e7ef;
 }
-.auto-export-status {
-  color: #1e871c;
-  font-size: 0.96em;
-  margin-left: 0.6em;
+th {
+  background: #eef3fa;
+  text-align: left;
+  font-weight: bold;
 }
-details summary { cursor: pointer; }
 @media (max-width: 900px) {
-  .meter-row { flex-direction: column; gap: 0.8em 0.5em; }
-  .details-row { flex-direction: column; gap: 0.5em; }
-  .prob-row, .inject-row { flex-direction: column; gap: 0.5em; }
-  .details-content { margin-left: 0.1em; }
-  .chart-container { flex-direction: column; gap: 0.7em; align-items: stretch; }
-  .chart-container > div { width: 100%; max-width: 98vw; min-width: unset; }
+  .chart-container { flex-direction: column; gap: 1.2em; }
+  .meter-card { padding: 1em 0.7em 1.5em 0.7em; }
+}
+@media (max-width: 650px) {
+  .form-row { flex-direction: column; align-items: flex-start; gap: 0.5em; }
+  .collapsible-content { padding-left: 0.5em; }
+}
+
+/* --- Blue Buttons --- */
+.btn-blue {
+  background: #185bb4;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 0.42em 1.2em;
+  margin-right: 0.7em;
+  margin-bottom: 0.3em;
+  font-size: 1em;
+  font-weight: 500;
+  cursor: pointer;
+  box-shadow: 0 2px 6px #185bb444;
+  transition: background 0.13s, box-shadow 0.13s;
+}
+.btn-blue:hover:enabled {
+  background: #1977d2;
+  box-shadow: 0 3px 9px #185bb422;
+}
+.btn-blue:disabled {
+  opacity: 0.45;
+  background: #b6c8e6;
+  color: #fff;
+  cursor: not-allowed;
+}
+.export-btns .btn-blue {
+  min-width: 108px;
+}
+#addMeterBtn {
+  font-size: 1.1em;
+  padding: 0.8em 1.8em;
+  margin-bottom: 1em;
 }

@@ -2,15 +2,52 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>IoT Multi-Meter Water Simulator - v0.6</title>
+  <title>IoT SimBox — Water Meter Edition</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <link rel="stylesheet" href="style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script defer src="main.js"></script>
 </head>
 <body>
-  <h1>IoT Multi-Meter Water Simulator - v0.6</h1>
-  <button onclick="addMeter()">Add Meter</button>
-  <div id="meters"></div>
-  <script src="main.js"></script>
+  <header class="banner">
+    <h1>IoT SimBox <span class="sub">— Water Meter Edition</span></h1>
+    <div class="desc">Your modular, cloud-ready simulator for water meter IoT data</div>
+    <div class="beta-badge">Beta Demo</div>
+  </header>
+
+  <section class="about">
+    <h2>About IoT SimBox — Water Meter Edition</h2>
+    <p>
+      <b>IoT SimBox</b> is a browser-based, real-time simulator for generating, visualizing, and exporting realistic water meter data.<br>
+      Designed for IoT professionals, educators, and solution developers, SimBox makes it easy to:
+    </p>
+    <ul>
+      <li>Simulate multiple meters with customizable usage patterns</li>
+      <li>Inject faults and status changes for realistic demo scenarios</li>
+      <li>Export data to MQTT brokers (HiveMQ, Mosquitto, and more)</li>
+      <li>Visualize and export readings instantly for analysis and reporting</li>
+      <li>Integrate with Node.js, Python, and major cloud platforms</li>
+    </ul>
+    <p class="beta-note">
+      <span>Demo/Beta Release — For evaluation and testing only</span>
+    </p>
+    <p class="contact">
+      For feedback and feature requests, contact: <a href="mailto:your.email@domain.com">your.email@domain.com</a>
+    </p>
+  </section>
+
+  <main class="mainbox">
+    <div class="top-row">
+      <button id="addMeterBtn" class="btn-blue" onclick="addMeter()">+ Add Water Meter</button>
+      <span class="instructions">Add and configure as many meters as you need. Each meter simulates live data and can export to MQTT or file.</span>
+    </div>
+    <div id="meters" style="margin-top:1.7em;"></div>
+  </main>
+
+  <footer>
+    IoT SimBox — Water Meter Edition (Beta Demo) &nbsp; &middot; &nbsp; 
+    &copy; 2024 Your Name or Brand
+  </footer>
 </body>
 </html>
