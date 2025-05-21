@@ -52,12 +52,12 @@ function startMeter(index) {
   const meter = meters[index];
   if (meter.timer) return;
   generateMeterData(meter, true); // Generate first point
-  renderMeters(); // Ensure DOM/canvases are present
   // Start periodic updates
   meter.timer = setInterval(() => {
     generateMeterData(meter, false);
     renderMeters();
   }, meter.interval * 1000);
+  renderMeters(); // Ensure DOM/canvases are present
 }
 
 function stopMeter(index) {
