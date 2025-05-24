@@ -4,6 +4,13 @@ let flowCharts = {};
 let totalCharts = {};
 let mqttClients = {};
 
+// Enforce min interval of 1 second
+function setIntervalSec(idx, val) {
+  let sec = Math.max(1, parseInt(val, 10) || 1);
+  meters[idx].interval = sec;
+  renderMeters();
+}
+
 function addMeter() {
   meterCount++;
   const meterId = "WM-" + String(meterCount).padStart(3, "0");
@@ -192,7 +199,7 @@ function renderMeters() {
           </select>
         </label>
         <label>Interval (sec):
-          <input type="number" min="1" value="${meter.interval}" onchange="meters[${idx}].interval=parseInt(this.value,10)">
+          <input type="number" min="1" value="${meter.interval}" onchange="setIntervalSec(${idx}, this.value)">
         </label>
         <button class="btn-blue" onclick="startMeter(${idx})" ${meter.timer ? "disabled" : ""}>Start</button>
         <button class="btn-blue" onclick="stopMeter(${idx})" ${meter.timer ? "" : "disabled"}>Stop</button>
@@ -416,6 +423,7 @@ window.removeMeter = removeMeter;
 window.exportCSV = exportCSV;
 window.exportJSON = exportJSON;
 window.injectFault = injectFault;
+window.setIntervalSec = setIntervalSec; // <--- Add this line
 
 // Demo: Add first meter
 addMeter();
