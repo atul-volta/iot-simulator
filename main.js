@@ -4,13 +4,47 @@ let flowCharts = {};
 let totalCharts = {};
 let mqttClients = {};
 
-// Enforce min interval of 1 second
+// ------ Utility Functions ------
 function setIntervalSec(idx, val) {
   let sec = Math.max(1, parseInt(val, 10) || 1);
   meters[idx].interval = sec;
   renderMeters();
 }
 
+function getStatusDurationSeconds(status) {
+  switch (status) {
+    case "burst":        return Math.floor(Math.random() * 120) + 60;
+    case "low flow":     return Math.floor(Math.random() * 600) + 300;
+    case "reverse flow": return Math.floor(Math.random() * 60) + 20;
+    case "outage":       return Math.floor(Math.random() * 300) + 60;
+    default:             return Math.floor(Math.random() * 120) + 20;
+  }
+}
+
+function getFlowRate(profile, status) {
+  const hour = new Date().getHours();
+  let base = 0;
+  if (profile === "residential") {
+    if ((hour >= 6 && hour <= 8) || (hour >= 18 && hour <= 21))
+      base = Math.random() * 10 + 5;
+    else if (hour >= 22 || hour <= 5)
+      base = Math.random() < 0.8 ? 0 : Math.random() * 2;
+    else
+      base = Math.random() * 3;
+  } else {
+    if (hour >= 8 && hour <= 18)
+      base = Math.random() * 8 + 3;
+    else
+      base = Math.random() < 0.9 ? 0 : Math.random() * 2;
+  }
+  if (status === "low flow") return Math.random() * 0.5 + 0.01;
+  if (status === "burst") return base * (2.2 + Math.random() * 1.3);
+  if (status === "reverse flow") return -1 * (Math.random() * 2 + 0.1);
+  if (status === "outage") return 0;
+  return base;
+}
+
+// ------ Meter Simulation ------
 function addMeter() {
   meterCount++;
   const meterId = "WM-" + String(meterCount).padStart(3, "0");
@@ -30,8 +64,12 @@ function addMeter() {
     leakProb: 2,
     burstProb: 1,
     reverseProb: 0.5,
-    offlineProb: 0.5,
+    outageProb: 0.5,
     injectNext: "",
+    currentStatus: "normal",
+    statusDuration: 0,
+    lastPhysicalStatus: "normal",
+    lastStatusDuration: 0
   });
   renderMeters();
 }
@@ -58,13 +96,12 @@ function removeMeter(index) {
 function startMeter(index) {
   const meter = meters[index];
   if (meter.timer) return;
-  generateMeterData(meter, true); // Generate first point
-  // Start periodic updates
+  generateMeterData(meter, true);
   meter.timer = setInterval(() => {
     generateMeterData(meter, false);
     renderMeters();
   }, meter.interval * 1000);
-  renderMeters(); // Ensure DOM/canvases are present
+  renderMeters();
 }
 
 function stopMeter(index) {
@@ -86,43 +123,77 @@ function getRandomStatus(meter) {
   if (r < meter.leakProb) return "low flow";
   if (r < meter.leakProb + meter.burstProb) return "burst";
   if (r < meter.leakProb + meter.burstProb + meter.reverseProb) return "reverse flow";
-  if (r < meter.leakProb + meter.burstProb + meter.reverseProb + meter.offlineProb) return "offline";
+  if (r < meter.leakProb + meter.burstProb + meter.reverseProb + meter.outageProb) return "outage";
   return "normal";
 }
 
-function generateMeterData(meter, isFirst) {
-  let status = "normal";
+function simulatePhysicalMeterReading(meter, isFirst) {
+  const simulationStep = 1;
+  const steps = Math.max(1, Math.floor(meter.interval / simulationStep));
+  let totalFlow = 0;
+  let volume = 0;
+  let statuses = [];
+  let status = meter.lastPhysicalStatus;
+  let statusDuration = meter.lastStatusDuration;
+
+  let injectedStatus = null;
   if (meter.injectNext) {
-    status = {
+    injectedStatus = {
       leak: "low flow",
       burst: "burst",
       reverse: "reverse flow",
-      offline: "offline"
+      outage: "outage"
     }[meter.injectNext] || "normal";
+    if (injectedStatus) {
+      status = injectedStatus;
+      statusDuration = getStatusDurationSeconds(injectedStatus);
+    }
     meter.injectNext = "";
-  } else if (!isFirst) {
-    status = getRandomStatus(meter);
   }
-  let flowRate = getFlowRate(meter.profile, status);
-  if (status === "offline") flowRate = 0;
-  meter.totalVolume += (flowRate * meter.interval) / 60;
+
+  for (let i = 0; i < steps; i++) {
+    if (isFirst && i === 0 && statusDuration === 0) {
+      status = "normal";
+      statusDuration = getStatusDurationSeconds("normal");
+    }
+    if (statusDuration > 0) {
+      statusDuration--;
+    } else {
+      status = getRandomStatus(meter);
+      statusDuration = getStatusDurationSeconds(status) - 1;
+    }
+    let flow;
+    if (status === "outage") {
+      flow = 0;
+    } else {
+      flow = getFlowRate(meter.profile, status);
+    }
+    totalFlow += flow;
+    volume += (flow * simulationStep) / 60;
+    statuses.push(status);
+  }
+  let avgFlow = totalFlow / steps;
+  meter.totalVolume += volume;
   const now = new Date();
   const label = now.toLocaleTimeString();
-  meter.data.unshift({
-    time: label,
-    flow: flowRate,
-    total: meter.totalVolume.toFixed(2),
-    status: status
-  });
-  if (meter.chartLabels.length >= 30) {
-    meter.chartLabels.pop();
-    meter.flowPoints.pop();
-    meter.totalPoints.pop();
-  }
-  meter.chartLabels.unshift(label);
-  meter.flowPoints.unshift(flowRate);
-  meter.totalPoints.unshift(meter.totalVolume);
+  const priority = ["burst", "reverse flow", "low flow", "outage", "normal"];
+  let finalStatus = priority.find(st => statuses.includes(st)) || "normal";
+  meter.lastPhysicalStatus = status;
+  meter.lastStatusDuration = statusDuration;
 
+  return {
+    time: label,
+    timestamp: now.toISOString(),
+    flow: avgFlow,
+    total: meter.totalVolume.toFixed(2),
+    status: finalStatus
+  };
+}
+
+function generateMeterData(meter, isFirst) {
+  const reading = simulatePhysicalMeterReading(meter, isFirst);
+
+  appendMeterData(meter, reading);
   if (meter.mqttEnabled && meter.mqttBroker && meter.mqttTopic) {
     if (!mqttClients[meter.id] || !mqttClients[meter.id].connected) {
       try {
@@ -144,10 +215,10 @@ function generateMeterData(meter, isFirst) {
     }
     const msg = {
       meter_id: meter.id,
-      timestamp: new Date().toISOString(),
-      flow_rate_lpm: meter.flowPoints[0],
-      total_volume_l: meter.totalPoints[0],
-      status: status
+      timestamp: reading.timestamp,
+      flow_rate_lpm: reading.flow,
+      total_volume_l: parseFloat(reading.total),
+      status: reading.status
     };
     try {
       mqttClients[meter.id].publish(meter.mqttTopic, JSON.stringify(msg));
@@ -158,27 +229,30 @@ function generateMeterData(meter, isFirst) {
   }
 }
 
-function getFlowRate(profile, status) {
-  const hour = new Date().getHours();
-  let base = 0;
-  if (profile === "residential") {
-    if ((hour >= 6 && hour <= 8) || (hour >= 18 && hour <= 21))
-      base = Math.random() * 10 + 5;
-    else if (hour >= 22 || hour <= 5)
-      base = Math.random() < 0.8 ? 0 : Math.random() * 2;
-    else
-      base = Math.random() * 3;
-  } else {
-    if (hour >= 8 && hour <= 18)
-      base = Math.random() * 8 + 3;
-    else
-      base = Math.random() < 0.9 ? 0 : Math.random() * 2;
+function appendMeterData(meter, entry) {
+  meter.data.unshift({
+    time: entry.time,
+    flow: entry.flow,
+    total: entry.total,
+    status: entry.status
+  });
+  if (meter.chartLabels.length >= 30) {
+    meter.chartLabels.pop();
+    meter.flowPoints.pop();
+    meter.totalPoints.pop();
   }
-  if (status === "low flow") return Math.random() * 0.5 + 0.01;
-  if (status === "burst") return base * (2.2 + Math.random() * 1.3);
-  if (status === "reverse flow") return -1 * (Math.random() * 2 + 0.1);
-  if (status === "offline") return 0;
-  return base;
+  meter.chartLabels.unshift(entry.time);
+  meter.flowPoints.unshift(entry.flow);
+  meter.totalPoints.unshift(parseFloat(entry.total));
+}
+
+function clearMeterStatus(index) {
+  const meter = meters[index];
+  meter.currentStatus = "normal";
+  meter.statusDuration = 0;
+  meter.lastPhysicalStatus = "normal";
+  meter.lastStatusDuration = 0;
+  renderMeters();
 }
 
 function renderMeters() {
@@ -187,7 +261,20 @@ function renderMeters() {
   meters.forEach((meter, idx) => {
     const meterDiv = document.createElement("div");
     meterDiv.className = "meter-card";
-    meterDiv.innerHTML = `
+    const nonNormalStatus = (
+      ["burst", "low flow", "reverse flow", "outage"].includes(meter.lastPhysicalStatus) && meter.lastStatusDuration > 0
+    );
+    if (["burst", "low flow", "reverse flow", "outage"].includes(meter.lastPhysicalStatus) && meter.lastStatusDuration > 0) {
+      meterDiv.innerHTML =
+        `<div class="offline-badge">${meter.lastPhysicalStatus.toUpperCase()}<br><small>Manual exit available</small></div>`
+        + meterDiv.innerHTML;
+    }
+    if (nonNormalStatus) {
+      meterDiv.innerHTML =
+        `<button class="btn-blue exit-status-btn" onclick="clearMeterStatus(${idx})" style="margin-bottom:1em;">Exit Status</button>`
+        + meterDiv.innerHTML;
+    }
+    meterDiv.innerHTML += `
       <div class="inline-row">
         <label><strong>Meter ID:</strong>
           <input value="${meter.id}" onchange="meters[${idx}].id=this.value">
@@ -245,8 +332,8 @@ function renderMeters() {
             <label>Reverse Flow (%):
               <input type="number" min="0" max="100" step="0.1" value="${meter.reverseProb}" onchange="meters[${idx}].reverseProb=parseFloat(this.value)">
             </label>
-            <label>Offline (%):
-              <input type="number" min="0" max="100" step="0.1" value="${meter.offlineProb}" onchange="meters[${idx}].offlineProb=parseFloat(this.value)">
+            <label>Outage (%):
+              <input type="number" min="0" max="100" step="0.1" value="${meter.outageProb || 0}" onchange="meters[${idx}].outageProb=parseFloat(this.value)">
             </label>
           </div>
           <div class="form-row">
@@ -256,7 +343,7 @@ function renderMeters() {
                 <option value="leak">leak</option>
                 <option value="burst">burst</option>
                 <option value="reverse">reverse flow</option>
-                <option value="offline">offline</option>
+                <option value="outage">outage</option>
               </select>
             </label>
             <button class="btn-blue" onclick="injectFault(${idx})">Inject</button>
@@ -291,7 +378,7 @@ function renderMeters() {
           ${meter.data.slice(0,5).map(d => `
             <tr>
               <td>${d.time}</td>
-              <td>${d.flow.toFixed(2)}</td>
+              <td>${(d.flow === null || d.flow === undefined) ? '' : d.flow.toFixed(2)}</td>
               <td>${d.total}</td>
               <td>${d.status}</td>
             </tr>
@@ -302,7 +389,6 @@ function renderMeters() {
     metersDiv.appendChild(meterDiv);
   });
 
-  // --- Always redraw all charts after DOM is ready
   setTimeout(() => {
     meters.forEach(meter => {
       drawOrUpdateChart(meter);
@@ -377,7 +463,7 @@ function exportCSV(index) {
   const meter = meters[index];
   if (!meter || meter.data.length === 0) return;
   const headers = ["Timestamp", "Flow Rate (L/min)", "Total Volume (L)", "Status"];
-  const rows = meter.data.map(d => [d.time, d.flow.toFixed(2), d.total, d.status]);
+  const rows = meter.data.map(d => [d.time, (d.flow === null || d.flow === undefined) ? '' : d.flow.toFixed(2), d.total, d.status]);
   let csvContent = headers.join(",") + "\n" +
     rows.map(e => e.join(",")).join("\n");
   const blob = new Blob([csvContent], { type: "text/csv" });
@@ -404,7 +490,6 @@ function exportJSON(index) {
   URL.revokeObjectURL(url);
 }
 
-// Collapsible dropdown UI handler
 document.addEventListener('DOMContentLoaded', function() {
   document.body.addEventListener('click', function(event) {
     if (event.target.classList.contains('collapsible-toggle') || event.target.closest('.collapsible-toggle')) {
@@ -415,7 +500,6 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 
-// Expose for inline onclick
 window.addMeter = addMeter;
 window.startMeter = startMeter;
 window.stopMeter = stopMeter;
@@ -423,7 +507,7 @@ window.removeMeter = removeMeter;
 window.exportCSV = exportCSV;
 window.exportJSON = exportJSON;
 window.injectFault = injectFault;
-window.setIntervalSec = setIntervalSec; // <--- Add this line
+window.setIntervalSec = setIntervalSec;
+window.clearMeterStatus = clearMeterStatus;
 
-// Demo: Add first meter
 addMeter();

@@ -12,39 +12,28 @@
 <body>
   <header class="banner">
     <h1>IoT SimBox <span class="sub">— Water Meter Edition</span></h1>
-    <div class="desc">Your modular, cloud-ready simulator for water meter IoT data</div>
+    <div class="desc">A modular, cloud-ready simulator for water meter IoT data and anomaly events</div>
     <div class="preview-badge">Preview Edition</div>
   </header>
-
   <section class="about">
-    <h2>About IoT SimBox — Water Meter Edition</h2>
-    <p>
-      <b>IoT SimBox</b> is a browser-based, real-time simulator for generating, visualising and exporting realistic water meter data.<br>
-      Designed for IoT professionals, educators and solution developers, SimBox makes it easy to:
-    </p>
+    <h2>About</h2>
     <ul>
-      <li>Simulate multiple meters with customisable usage patterns</li>
-      <li>Inject faults and status changes for realistic demo scenarios</li>
-      <li>Export data to MQTT brokers (HiveMQ, Mosquitto, and more)</li>
-      <li>Visualise and export readings instantly for analysis and reporting</li>
-      <li>Integrate with Node.js, Python, and major cloud platforms</li>
+      <li>Simulate any number of digital water meters with real-world anomaly logic.</li>
+      <li>Inject faults such as leak (low flow), burst, reverse flow and outages to test system reactions.</li>
+      <li>Export readings as CSV/JSON, or enable MQTT for live streaming to your platform.</li>
+      <li>All readings update in real-time.</li>
     </ul>
-    <p class="beta-note">
-      <span>Preview Release — For evaluation and testing</span>
-    </p>
-    <p class="contact">
-      For feedback and feature requests, contact: <a href="mailto:atulkuver@kcproserv.com.au">atulkuver@kcproserv.com.au</a>
-    </p>
+    <div class="beta-note">
+      For testing, research and demonstration only. Not for commercial metering or billing!
+    </div>
   </section>
-
   <main class="mainbox">
     <div class="top-row">
       <button id="addMeterBtn" class="btn-blue" onclick="addMeter()">+ Add Water Meter</button>
-      <span class="instructions">Add and configure as many meters as you need. Each meter simulates live data and can export to MQTT or file.</span>
+      <span class="instructions">Add, simulate and inject faults in digital meters. Export or stream as needed.</span>
     </div>
     <div id="meters" style="margin-top:1.7em;"></div>
   </main>
-
   <footer>
     IoT SimBox — Water Meter Edition (Preview) &nbsp; &middot; &nbsp; 
     &copy; 2025 Kuver Consulting and Professional Services

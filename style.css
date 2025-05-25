@@ -110,6 +110,7 @@ footer {
   max-width: 740px;
   margin-left: auto;
   margin-right: auto;
+  position: relative;
 }
 .meter-card > div:not(.collapsible-section):not(.collapsible-content) {
   margin-bottom: 1.3em;
@@ -290,4 +291,39 @@ th {
   font-size: 1.1em;
   padding: 0.8em 1.8em;
   margin-bottom: 1em;
+}
+
+/* --- Status Badge and Exit Button --- */
+.offline-badge {
+  position: absolute;
+  top: 12px;
+  right: 20px;
+  background: #c14530;
+  color: #fff;
+  font-weight: bold;
+  padding: 0.3em 1.1em;
+  border-radius: 8px;
+  font-size: 1.09em;
+  z-index: 5;
+  box-shadow: 0 2px 7px #c1453020;
+  text-align: center;
+  line-height: 1.3em;
+}
+.exit-status-btn {
+  background: #f0a202;
+  color: #fff;
+  border: none;
+  border-radius: 7px;
+  padding: 0.35em 1.1em;
+  margin-bottom: 0.6em;
+  font-size: 1em;
+  font-weight: 500;
+  box-shadow: 0 2px 6px #f0a20244;
+  cursor: pointer;
+  transition: background 0.13s;
+  z-index: 10;
+  position: relative;
+}
+.exit-status-btn:hover {
+  background: #e38c08;
 }
