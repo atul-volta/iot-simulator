@@ -8,7 +8,15 @@ let mqttClients = {};
 function setIntervalSec(idx, val) {
   let sec = Math.max(1, parseInt(val, 10) || 1);
   meters[idx].interval = sec;
-  renderMeters();
+
+  // Update the input box in case the value was changed
+  const card = document.getElementById(`meter-card-${meters[idx].id}`);
+  if (card) {
+    const input = card.querySelector('input[type="number"]');
+    if (input) input.value = sec;
+  }
+
+  updateMeterDisplay(idx);
 }
 
 function getStatusDurationSeconds(status) {
@@ -61,7 +69,7 @@ function addMeter() {
     mqttEnabled: false,
     mqttBroker: "wss://broker.hivemq.com:8884/mqtt",
     mqttTopic: `iot/watermeter/${meterId}`,
-    leakProb: 2,
+    lowFlowProb: 2,
     burstProb: 1,
     reverseProb: 0.5,
     outageProb: 0.5,
@@ -99,15 +107,15 @@ function startMeter(index) {
   generateMeterData(meter, true);
   meter.timer = setInterval(() => {
     generateMeterData(meter, false);
-    renderMeters();
+    updateMeterDisplay(index); // Only update table/chart/fault badge for this meter
   }, meter.interval * 1000);
-  renderMeters();
+  updateMeterDisplay(index);
 }
 
 function stopMeter(index) {
   clearInterval(meters[index].timer);
   meters[index].timer = null;
-  renderMeters();
+  updateMeterDisplay(index);
 }
 
 function injectFault(index) {
@@ -120,10 +128,10 @@ function injectFault(index) {
 
 function getRandomStatus(meter) {
   const r = Math.random() * 100;
-  if (r < meter.leakProb) return "low flow";
-  if (r < meter.leakProb + meter.burstProb) return "burst";
-  if (r < meter.leakProb + meter.burstProb + meter.reverseProb) return "reverse flow";
-  if (r < meter.leakProb + meter.burstProb + meter.reverseProb + meter.outageProb) return "outage";
+  if (r < meter.lowFlowProb) return "low flow";
+  if (r < meter.lowFlowProb + meter.burstProb) return "burst";
+  if (r < meter.lowFlowProb + meter.burstProb + meter.reverseProb) return "reverse flow";
+  if (r < meter.lowFlowProb + meter.burstProb + meter.reverseProb + meter.outageProb) return "outage";
   return "normal";
 }
 
@@ -139,7 +147,7 @@ function simulatePhysicalMeterReading(meter, isFirst) {
   let injectedStatus = null;
   if (meter.injectNext) {
     injectedStatus = {
-      leak: "low flow",
+      "low flow": "low flow",
       burst: "burst",
       reverse: "reverse flow",
       outage: "outage"
@@ -261,26 +269,16 @@ function renderMeters() {
   meters.forEach((meter, idx) => {
     const meterDiv = document.createElement("div");
     meterDiv.className = "meter-card";
-    const nonNormalStatus = (
-      ["burst", "low flow", "reverse flow", "outage"].includes(meter.lastPhysicalStatus) && meter.lastStatusDuration > 0
-    );
-    if (["burst", "low flow", "reverse flow", "outage"].includes(meter.lastPhysicalStatus) && meter.lastStatusDuration > 0) {
-      meterDiv.innerHTML =
-        `<div class="offline-badge">${meter.lastPhysicalStatus.toUpperCase()}<br><small>Manual exit available</small></div>`
-        + meterDiv.innerHTML;
-    }
-    if (nonNormalStatus) {
-      meterDiv.innerHTML =
-        `<button class="btn-blue exit-status-btn" onclick="clearMeterStatus(${idx})" style="margin-bottom:1em;">Exit Status</button>`
-        + meterDiv.innerHTML;
-    }
+    meterDiv.id = `meter-card-${meter.id}`;
+
+    // Badge & button will be dynamically added in updateFaultBadge
     meterDiv.innerHTML += `
       <div class="inline-row">
         <label><strong>Meter ID:</strong>
-          <input value="${meter.id}" onchange="meters[${idx}].id=this.value">
+          <input value="${meter.id}" onchange="meters[${idx}].id=this.value; updateMeterDisplay(${idx})">
         </label>
         <label>Profile:
-          <select onchange="meters[${idx}].profile=this.value">
+          <select onchange="meters[${idx}].profile=this.value; updateMeterDisplay(${idx})">
             <option value="residential" ${meter.profile==="residential"?"selected":""}>Residential</option>
             <option value="commercial" ${meter.profile==="commercial"?"selected":""}>Commercial</option>
           </select>
@@ -323,8 +321,8 @@ function renderMeters() {
         </button>
         <div class="collapsible-content">
           <div class="inline-row">
-            <label>Leak (%):
-              <input type="number" min="0" max="100" step="0.1" value="${meter.leakProb}" onchange="meters[${idx}].leakProb=parseFloat(this.value)">
+            <label>Low Flow (%):
+              <input type="number" min="0" max="100" step="0.1" value="${meter.lowFlowProb}" onchange="meters[${idx}].lowFlowProb=parseFloat(this.value)">
             </label>
             <label>Burst (%):
               <input type="number" min="0" max="100" step="0.1" value="${meter.burstProb}" onchange="meters[${idx}].burstProb=parseFloat(this.value)">
@@ -340,7 +338,7 @@ function renderMeters() {
             <label>Inject Fault: 
               <select id="injectFault-${meter.id}">
                 <option value="">-- select --</option>
-                <option value="leak">leak</option>
+                <option value="low flow">low flow</option>
                 <option value="burst">burst</option>
                 <option value="reverse">reverse flow</option>
                 <option value="outage">outage</option>
@@ -374,84 +372,130 @@ function renderMeters() {
             <th>Status</th>
           </tr>
         </thead>
-        <tbody>
-          ${meter.data.slice(0,5).map(d => `
-            <tr>
-              <td>${d.time}</td>
-              <td>${(d.flow === null || d.flow === undefined) ? '' : d.flow.toFixed(2)}</td>
-              <td>${d.total}</td>
-              <td>${d.status}</td>
-            </tr>
-          `).join("")}
+        <tbody id="readings-${meter.id}">
+          <!-- readings will be filled dynamically -->
         </tbody>
       </table>
     `;
     metersDiv.appendChild(meterDiv);
-  });
 
-  setTimeout(() => {
-    meters.forEach(meter => {
-      drawOrUpdateChart(meter);
-    });
-  }, 0);
+    // --- Destroy any old charts and re-create, then update data ---
+    setTimeout(() => {
+      if (flowCharts[meter.id]) {
+        flowCharts[meter.id].destroy();
+        flowCharts[meter.id] = null;
+      }
+      if (totalCharts[meter.id]) {
+        totalCharts[meter.id].destroy();
+        totalCharts[meter.id] = null;
+      }
+      const flowCanvas = document.getElementById(`flowChart-${meter.id}`);
+      const totalCanvas = document.getElementById(`totalChart-${meter.id}`);
+      flowCharts[meter.id] = new Chart(flowCanvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: meter.chartLabels.slice().reverse(),
+          datasets: [{
+            label: 'Flow Rate',
+            data: meter.flowPoints.slice().reverse(),
+            fill: false,
+            borderColor: 'rgba(50,102,244,0.8)',
+            tension: 0.3,
+          }]
+        },
+        options: {
+          animation: false,
+          plugins: { legend: { display: false }},
+          scales: { x: { display: false }, y: { beginAtZero: true } }
+        }
+      });
+      totalCharts[meter.id] = new Chart(totalCanvas.getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: meter.chartLabels.slice().reverse(),
+          datasets: [{
+            label: 'Total Volume',
+            data: meter.totalPoints.slice().reverse(),
+            fill: true,
+            borderColor: 'rgba(61,184,116,0.9)',
+            backgroundColor: 'rgba(61,184,116,0.12)',
+            tension: 0.3,
+          }]
+        },
+        options: {
+          animation: false,
+          plugins: { legend: { display: false }},
+          scales: { x: { display: false }, y: { beginAtZero: true } }
+        }
+      });
+      updateMeterDisplay(idx);
+    }, 0);
+  });
 }
 
-function drawOrUpdateChart(meter) {
-  const flowCanvas = document.getElementById(`flowChart-${meter.id}`);
-  const flowLabels = meter.chartLabels.length ? meter.chartLabels.slice().reverse() : [""];
-  const flowPoints = meter.flowPoints.length ? meter.flowPoints.slice().reverse() : [0];
+function updateMeterDisplay(idx) {
+  const meter = meters[idx];
+  // Update chart data
   if (flowCharts[meter.id]) {
-    flowCharts[meter.id].destroy();
-    delete flowCharts[meter.id];
+    flowCharts[meter.id].data.labels = meter.chartLabels.slice().reverse();
+    flowCharts[meter.id].data.datasets[0].data = meter.flowPoints.slice().reverse();
+    flowCharts[meter.id].update();
   }
-  if (flowCanvas) {
-    flowCharts[meter.id] = new Chart(flowCanvas.getContext('2d'), {
-      type: 'line',
-      data: {
-        labels: flowLabels,
-        datasets: [{
-          label: 'Flow Rate',
-          data: flowPoints,
-          fill: false,
-          borderColor: 'rgba(50,102,244,0.8)',
-          tension: 0.3,
-        }]
-      },
-      options: {
-        animation: false,
-        plugins: { legend: { display: false }},
-        scales: { x: { display: false }, y: { beginAtZero: true } }
-      }
-    });
-  }
-  const totalCanvas = document.getElementById(`totalChart-${meter.id}`);
-  const totalLabels = meter.chartLabels.length ? meter.chartLabels.slice().reverse() : [""];
-  const totalPoints = meter.totalPoints.length ? meter.totalPoints.slice().reverse() : [0];
   if (totalCharts[meter.id]) {
-    totalCharts[meter.id].destroy();
-    delete totalCharts[meter.id];
+    totalCharts[meter.id].data.labels = meter.chartLabels.slice().reverse();
+    totalCharts[meter.id].data.datasets[0].data = meter.totalPoints.slice().reverse();
+    totalCharts[meter.id].update();
   }
-  if (totalCanvas) {
-    totalCharts[meter.id] = new Chart(totalCanvas.getContext('2d'), {
-      type: 'line',
-      data: {
-        labels: totalLabels,
-        datasets: [{
-          label: 'Total Volume',
-          data: totalPoints,
-          fill: true,
-          borderColor: 'rgba(61,184,116,0.9)',
-          backgroundColor: 'rgba(61,184,116,0.12)',
-          tension: 0.3,
-        }]
-      },
-      options: {
-        animation: false,
-        plugins: { legend: { display: false }},
-        scales: { x: { display: false }, y: { beginAtZero: true } }
-      }
-    });
+  updateTableRows(meter);
+
+  // Update start/stop buttons
+  const card = document.getElementById(`meter-card-${meter.id}`);
+  if (card) {
+    const startBtn = card.querySelector('button[onclick^="startMeter"]');
+    const stopBtn = card.querySelector('button[onclick^="stopMeter"]');
+    if (startBtn) startBtn.disabled = !!meter.timer;
+    if (stopBtn) stopBtn.disabled = !meter.timer;
   }
+
+  // --- Fault badge/button update ---
+  updateFaultBadge(idx);
+}
+
+function updateFaultBadge(idx) {
+  const meter = meters[idx];
+  const card = document.getElementById(`meter-card-${meter.id}`);
+  if (!card) return;
+  // Remove old badge/button if they exist
+  const oldBadge = card.querySelector('.offline-badge');
+  if (oldBadge) oldBadge.remove();
+  const oldExitBtn = card.querySelector('.exit-status-btn');
+  if (oldExitBtn) oldExitBtn.remove();
+  // If meter is in fault, add badge and manual exit button
+  if (["burst", "low flow", "reverse flow", "outage"].includes(meter.lastPhysicalStatus) && meter.lastStatusDuration > 0) {
+    const statusBadge = document.createElement("div");
+    statusBadge.className = "offline-badge";
+    statusBadge.innerHTML = `${meter.lastPhysicalStatus.toUpperCase()}<br><small>Manual exit available</small>`;
+    card.insertBefore(statusBadge, card.firstChild);
+    const exitBtn = document.createElement("button");
+    exitBtn.className = "btn-blue exit-status-btn";
+    exitBtn.style.marginBottom = "1em";
+    exitBtn.innerText = "Exit Status";
+    exitBtn.onclick = () => clearMeterStatus(idx);
+    card.insertBefore(exitBtn, statusBadge.nextSibling);
+  }
+}
+
+function updateTableRows(meter) {
+  const tbody = document.getElementById(`readings-${meter.id}`);
+  if (!tbody) return;
+  tbody.innerHTML = meter.data.slice(0,5).map(d => `
+    <tr>
+      <td>${d.time}</td>
+      <td>${(d.flow === null || d.flow === undefined) ? '' : d.flow.toFixed(2)}</td>
+      <td>${d.total}</td>
+      <td>${d.status}</td>
+    </tr>
+  `).join("");
 }
 
 function updateMqttStatus(meterId, msg) {
@@ -491,6 +535,7 @@ function exportJSON(index) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+  renderMeters();
   document.body.addEventListener('click', function(event) {
     if (event.target.classList.contains('collapsible-toggle') || event.target.closest('.collapsible-toggle')) {
       const btn = event.target.closest('.collapsible-toggle');
@@ -509,5 +554,6 @@ window.exportJSON = exportJSON;
 window.injectFault = injectFault;
 window.setIntervalSec = setIntervalSec;
 window.clearMeterStatus = clearMeterStatus;
+window.updateMeterDisplay = updateMeterDisplay;
 
 addMeter();
